@@ -1,8 +1,15 @@
 # figma-mcp-go
 
-> Figma MCP server for Free Users, No Rate Limits
+Figma MCP Server Without API Rate Limits
 
-Works with Cursor, Claude, GitHub Copilot, and any MCP-compatible AI tool.
+A free, open-source Figma MCP server that reads Figma files directly via plugin — no REST API, no rate limits. Works with Cursor, Claude, GitHub Copilot, and any MCP-compatible AI tool.
+
+**Highlights**
+- No Figma API token required
+- No rate limits — free plan friendly
+- Reads live Figma data via plugin bridge
+- Works locally — no cloud calls
+- Written in Go, distributed via npm
 
 ---
 
@@ -18,36 +25,38 @@ That sounds fine… until you hit this:
 | Pro / Org (Dev seat) | 200 tool calls/day |
 | Enterprise | 600 tool calls/day |
 
-If you're experimenting with AI tools, you’ll burn through that in minutes.
+If you're experimenting with AI tools, you'll burn through that in minutes.
 
-I didn’t have enough money to pay for higher limits.
-So I built something that **doesn’t use the API at all**.
+I didn't have enough money to pay for higher limits.
+So I built something that **doesn't use the API at all**.
 
-## Setup
+---
 
-Watch the video:
+## Installation & Setup
+
+Install via `npx` — no build step required. Watch the setup video or follow the steps below.
 
 [![Watch the video](https://img.youtube.com/vi/DjqyU0GKv9k/sddefault.jpg)](https://youtu.be/DjqyU0GKv9k)
 
 ### 1. Configure your AI tool
 
-.vscode/mcp.json
+**.vscode/mcp.json** (Cursor / VS Code / GitHub Copilot)
 ```json
 {
-	"servers": {
-		"figma-mcp-go": {
-			"type": "stdio",
-			"command": "npx",
-			"args": [
-				"-y",
-				"@vkhanhqui/figma-mcp-go"
-			]
-		}
-	}
+  "servers": {
+    "figma-mcp-go": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@vkhanhqui/figma-mcp-go"
+      ]
+    }
+  }
 }
 ```
 
-.mcp.json
+**.mcp.json** (Claude and other MCP-compatible tools)
 ```json
 {
   "mcpServers": {
@@ -62,12 +71,12 @@ Watch the video:
 ### 2. Install the Figma plugin
 
 1. In Figma Desktop: **Plugins → Development → Import plugin from manifest**
-2. Select `manifest.json` in the [plugin.zip](https://github.com/vkhanhqui/figma-mcp-go/releases)
+2. Select `manifest.json` from the [plugin.zip](https://github.com/vkhanhqui/figma-mcp-go/releases)
 3. Run the plugin inside any Figma file
 
 ---
 
-## Available tools
+## Available Tools
 
 ### Document & Selection
 
@@ -100,12 +109,14 @@ Watch the video:
 
 ---
 
-## Contributing
-
-Issues and PRs are welcome.
-
-## References
+## Related Projects
 
 - [magic-spells/figma-mcp-bridge](https://github.com/magic-spells/figma-mcp-bridge)
 - [grab/cursor-talk-to-figma-mcp](https://github.com/grab/cursor-talk-to-figma-mcp)
 - [gethopp/figma-mcp-bridge](https://github.com/gethopp/figma-mcp-bridge)
+
+---
+
+## Contributing
+
+Issues and PRs are welcome.
