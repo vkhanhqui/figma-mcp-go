@@ -25,6 +25,10 @@ So I built something that **doesn’t use the API at all**.
 
 ## Setup
 
+Watch the video:
+
+[![Watch the video](https://img.youtube.com/vi/DjqyU0GKv9k/sddefault.jpg)](https://youtu.be/DjqyU0GKv9k)
+
 ### 1. Configure your AI tool
 
 .vscode/mcp.json
