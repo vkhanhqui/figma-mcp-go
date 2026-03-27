@@ -58,7 +58,7 @@ So I built something that **doesn’t use the API at all**.
 ### 2. Install the Figma plugin
 
 1. In Figma Desktop: **Plugins → Development → Import plugin from manifest**
-2. Select `manifest.json` in the release download
+2. Select `manifest.json` in the [plugin.zip](https://github.com/vkhanhqui/figma-mcp-go/releases)
 3. Run the plugin inside any Figma file
 
 ---
