@@ -6,8 +6,10 @@ import (
 	"strings"
 )
 
-// nodeIDPattern matches Figma node IDs: colon-separated integers e.g. "4029:12345"
-var nodeIDPattern = regexp.MustCompile(`^\d+:\d+$`)
+// nodeIDPattern matches Figma node IDs:
+//   simple:   "4029:12345"
+//   compound: "I2167:9091;186:1579;186:1745" (instances/variants)
+var nodeIDPattern = regexp.MustCompile(`^I?\d+:\d+(;\d+:\d+)*$`)
 
 // NormalizeNodeID converts hyphen-format node IDs (LLM output artifact) to colon format.
 // "4029-12345" → "4029:12345". No-ops for already-valid or unrecognized strings.
