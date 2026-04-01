@@ -24,3 +24,7 @@ example/
 .vscode/
 release
 localonly
+
+# Generated files
+figma-mcp-go
+plugin/bundle

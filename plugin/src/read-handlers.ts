@@ -498,8 +498,8 @@ export const handleReadRequest = async (request: any) => {
             id: n.id,
             name: n.name,
             characters: n.characters,
-            fontSize: n.fontSize,
-            fontName: n.fontName,
+            fontSize: n.fontSize === figma.mixed ? "mixed" : n.fontSize,
+            fontName: n.fontName === figma.mixed ? "mixed" : n.fontName,
           });
         }
         if ("children" in n)
