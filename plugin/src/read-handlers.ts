@@ -1,7 +1,7 @@
 // Read handlers — all read-only Figma operations.
 // Returns null for unknown request types so the caller can try write handlers next.
 
-import { serializeNode, getBounds, serializeStyles, serializeVariableValue } from "./serializers";
+import { serializeNode, getBounds, serializeStyles, serializeVariableValue, isMixed } from "./serializers";
 
 export const handleReadRequest = async (request: any) => {
   switch (request.type) {
@@ -498,8 +498,8 @@ export const handleReadRequest = async (request: any) => {
             id: n.id,
             name: n.name,
             characters: n.characters,
-            fontSize: n.fontSize === figma.mixed ? "mixed" : n.fontSize,
-            fontName: n.fontName === figma.mixed ? "mixed" : n.fontName,
+            fontSize: isMixed(n.fontSize) ? "mixed" : n.fontSize,
+            fontName: isMixed(n.fontName) ? "mixed" : n.fontName,
           });
         }
         if ("children" in n)
