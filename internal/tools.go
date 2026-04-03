@@ -233,24 +233,22 @@ func writeBase64(b64, outputPath string) (int, error) {
 }
 
 func resolveOutputPath(outputPath, workDir string) (string, error) {
-	// Reject absolute paths early — filepath.Join on Windows can let a drive-letter
-	// absolute path escape the workDir check via filepath.Rel.
 	if filepath.IsAbs(outputPath) {
-		return "", fmt.Errorf("outputPath must be a relative path, got: %s", outputPath)
+		return mustBeInsideDir(filepath.Clean(outputPath), workDir)
 	}
+	return mustBeInsideDir(filepath.Join(workDir, outputPath), workDir)
+}
 
-	resolved := filepath.Join(workDir, outputPath)
+func mustBeInsideDir(resolved, workDir string) (string, error) {
 	rel, err := filepath.Rel(workDir, resolved)
 	if err != nil {
 		return "", fmt.Errorf("outputPath must be inside the working directory: %s", workDir)
 	}
-
 	// Convert to forward slashes before prefix check so Windows paths like
 	// "C:\.." don't bypass the ".." detection.
 	if strings.HasPrefix(filepath.ToSlash(rel), "..") {
 		return "", fmt.Errorf("outputPath must be inside the working directory: %s", workDir)
 	}
-
 	return resolved, nil
 }
 
