@@ -8,6 +8,7 @@ const sendStatus = () => {
     type: "plugin-status",
     payload: {
       fileName: figma.root.name,
+      pageName: figma.currentPage.name,
       selectionCount: figma.currentPage.selection.length,
     },
   });
@@ -30,10 +31,14 @@ const handleRequest = async (request: any) => {
   }
 };
 
-figma.showUI(__html__, { width: 320, height: 180 });
+figma.showUI(__html__, { width: 320, height: 210 });
 sendStatus();
 
 figma.on("selectionchange", () => {
+  sendStatus();
+});
+
+figma.on("currentpagechange", () => {
   sendStatus();
 });
 

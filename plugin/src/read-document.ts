@@ -73,7 +73,7 @@ export const handleReadDocumentRequest = async (request: any) => {
       const extractInstanceOverrides = async (
         instanceNode: any,
         componentNode: any,
-      ): Promise<{ id: string; name: string; type: string; characters?: string; mainComponentId?: string | null }[]> => {
+      ): Promise<{ id: string; name: string; type: string; characters?: string; mainComponentId?: string | null; visible?: boolean; opacity?: number; fills?: any }[]> => {
         const overrides: any[] = [];
         if (!instanceNode?.children || !componentNode?.children) return overrides;
         for (let i = 0; i < instanceNode.children.length; i++) {
@@ -81,10 +81,32 @@ export const handleReadDocumentRequest = async (request: any) => {
           const compChild = componentNode.children[i];
           if (!instChild || !compChild) continue;
 
-          if (instChild.type === "TEXT") {
-            if (instChild.characters !== compChild.characters) {
-              overrides.push({ id: instChild.id, name: instChild.name, type: "TEXT", characters: instChild.characters });
+          // Detect property overrides (visible, opacity, fills) for all node types
+          const propChanges: any = {};
+          if ("visible" in instChild && "visible" in compChild && instChild.visible !== compChild.visible) {
+            propChanges.visible = instChild.visible;
+          }
+          if ("opacity" in instChild && "opacity" in compChild && instChild.opacity !== compChild.opacity) {
+            propChanges.opacity = instChild.opacity;
+          }
+          if ("fills" in instChild && "fills" in compChild && !isMixed(instChild.fills) && !isMixed(compChild.fills)) {
+            if (JSON.stringify(instChild.fills) !== JSON.stringify(compChild.fills)) {
+              propChanges.fills = instChild.fills;
             }
+          }
+
+          if (instChild.type === "TEXT") {
+            const override: any = { id: instChild.id, name: instChild.name, type: "TEXT" };
+            let hasChange = false;
+            if (instChild.characters !== compChild.characters) {
+              override.characters = instChild.characters;
+              hasChange = true;
+            }
+            if (Object.keys(propChanges).length > 0) {
+              Object.assign(override, propChanges);
+              hasChange = true;
+            }
+            if (hasChange) overrides.push(override);
             continue;
           }
 
@@ -94,13 +116,21 @@ export const handleReadDocumentRequest = async (request: any) => {
               compChild.type === "INSTANCE" ? compChild.getMainComponentAsync() : Promise.resolve(null),
             ]);
             if (nestedMc?.id !== compMc?.id) {
-              overrides.push({ id: instChild.id, name: instChild.name, type: "INSTANCE", mainComponentId: nestedMc?.id ?? null });
+              const override: any = { id: instChild.id, name: instChild.name, type: "INSTANCE", mainComponentId: nestedMc?.id ?? null };
+              if (Object.keys(propChanges).length > 0) Object.assign(override, propChanges);
+              overrides.push(override);
               continue;
+            }
+            if (Object.keys(propChanges).length > 0) {
+              overrides.push({ id: instChild.id, name: instChild.name, type: "INSTANCE", mainComponentId: nestedMc?.id ?? null, ...propChanges });
             }
             if (nestedMc) overrides.push(...await extractInstanceOverrides(instChild, nestedMc));
             continue;
           }
 
+          if (Object.keys(propChanges).length > 0) {
+            overrides.push({ id: instChild.id, name: instChild.name, type: instChild.type, ...propChanges });
+          }
           if ("children" in instChild) {
             overrides.push(...await extractInstanceOverrides(instChild, compChild));
           }

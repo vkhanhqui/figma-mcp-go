@@ -3,7 +3,10 @@
 
   let connected = false;
   let fileName = "—";
+  let pageName = "—";
   let selectionCount = 0;
+  let activeRequests = new Set<string>();
+  $: isWorking = activeRequests.size > 0;
 
   const WS_URL = "ws://localhost:1994/ws";
   const RECONNECT_DELAY_MS = 1500;
@@ -23,6 +26,8 @@
     socket.onclose = () => {
       connected = false;
       socket = null;
+      activeRequests.clear();
+      activeRequests = activeRequests;
       if (reconnectTimer === null) {
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null;
@@ -38,6 +43,10 @@
     socket.onmessage = (event) => {
       try {
         const payload = JSON.parse(event.data);
+        if (payload.requestId) {
+          activeRequests.add(payload.requestId);
+          activeRequests = activeRequests;
+        }
         parent.postMessage({ pluginMessage: { type: "server-request", payload } }, "*");
       } catch {
         // ignore malformed frames
@@ -51,12 +60,19 @@
 
     if (msg.type === "plugin-status") {
       fileName = msg.payload.fileName;
+      pageName = msg.payload.pageName ?? "—";
       selectionCount = msg.payload.selectionCount;
       return;
     }
 
-    if ("requestId" in msg && socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(msg));
+    if ("requestId" in msg) {
+      if (msg.type !== "progress_update") {
+        activeRequests.delete(msg.requestId);
+        activeRequests = activeRequests;
+      }
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(msg));
+      }
     }
   }
 
@@ -76,13 +92,23 @@
   <div class="info-section">
     <div class="info-row">
       <span class="info-label">File</span>
-      <span class="info-value">{fileName}</span>
+      <span class="info-value" title={fileName}>{fileName}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Page</span>
+      <span class="info-value" title={pageName}>{pageName}</span>
     </div>
     <div class="info-row">
       <span class="info-label">Selection</span>
       <span class="info-value">{selectionCount} node(s)</span>
     </div>
   </div>
+  {#if isWorking}
+    <div class="working-banner">
+      <span class="spinner"></span>
+      <span>AI is working…</span>
+    </div>
+  {/if}
   <div class="footer">
     <a
       class="author"
@@ -95,9 +121,22 @@
       />
       vkhanhqui
     </a>
-    <div class="badge" class:connected class:disconnected={!connected}>
-      <span class="dot" class:connected></span>
-      <span>{connected ? "Connected" : "Disconnected"}</span>
+    <div class="footer-right">
+      <a
+        class="bug-report"
+        href="https://github.com/vkhanhqui/figma-mcp-go/issues/new"
+        target="_blank"
+        title="Report a bug"
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7-3.25v2.992l2.028.812.772-1.932-2.8-1.872ZM6.272 3.937 3.5 5.808l.772 1.932L6.3 6.928V3.873a.75.75 0 0 0-.028.064ZM8.75 9.75H7.25V11h1.5V9.75Zm0-5.5H7.25v4h1.5v-4Z"/>
+        </svg>
+        Bug report
+      </a>
+      <div class="badge" class:connected class:disconnected={!connected}>
+        <span class="dot" class:connected></span>
+        <span>{connected ? "Connected" : "Disconnected"}</span>
+      </div>
     </div>
   </div>
 </div>
@@ -145,12 +184,62 @@
   .info-value {
     color: #e0e0e0;
     font-weight: 500;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .working-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #1a2e3a;
+    border: 1px solid #2563eb44;
+    border-radius: 8px;
+    color: #60a5fa;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .spinner {
+    width: 10px;
+    height: 10px;
+    border: 2px solid #60a5fa44;
+    border-top-color: #60a5fa;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+
+  .footer-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .bug-report {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+    color: #888;
+    font-size: 11px;
+  }
+
+  .bug-report:hover {
+    color: #f87171;
   }
 
   .author {

@@ -565,8 +565,113 @@ func ValidateRPC(tool string, nodeIDs []string, params map[string]interface{}) s
 				return fmt.Sprintf("invalid nodeId: %s — must use colon format e.g. 4029:12345", id)
 			}
 		}
+
+	// ── Prototype tools ──────────────────────────────────────────────────────
+
+	case "set_reactions":
+		if len(nodeIDs) == 0 || nodeIDs[0] == "" {
+			return "nodeId is required"
+		}
+		if !ValidNodeID(nodeIDs[0]) {
+			return fmt.Sprintf("nodeId must use colon format e.g. 4029:12345, got: %s", nodeIDs[0])
+		}
+		rawReactions, ok := params["reactions"]
+		if !ok {
+			return "reactions is required"
+		}
+		reactions, ok := rawReactions.([]any)
+		if !ok {
+			return "reactions must be an array"
+		}
+		if mode, ok := params["mode"].(string); ok && mode != "" {
+			if mode != "replace" && mode != "append" {
+				return fmt.Sprintf("mode must be 'replace' or 'append', got: %s", mode)
+			}
+		}
+		for i, raw := range reactions {
+			r, ok := raw.(map[string]any)
+			if !ok {
+				return fmt.Sprintf("reactions[%d] must be an object", i)
+			}
+			if msg := validateReaction(i, r); msg != "" {
+				return msg
+			}
+		}
+
+	case "remove_reactions":
+		if len(nodeIDs) == 0 || nodeIDs[0] == "" {
+			return "nodeId is required"
+		}
+		if !ValidNodeID(nodeIDs[0]) {
+			return fmt.Sprintf("nodeId must use colon format e.g. 4029:12345, got: %s", nodeIDs[0])
+		}
+		if raw, ok := params["indices"].([]any); ok {
+			for i, v := range raw {
+				if _, ok := v.(float64); !ok {
+					return fmt.Sprintf("indices[%d] must be a number", i)
+				}
+			}
+		}
 	}
 
+	return ""
+}
+
+var validTriggerTypes = map[string]bool{
+	"ON_CLICK": true, "ON_HOVER": true, "ON_PRESS": true, "ON_DRAG": true,
+	"AFTER_TIMEOUT": true, "MOUSE_ENTER": true, "MOUSE_LEAVE": true,
+	"MOUSE_UP": true, "MOUSE_DOWN": true,
+}
+
+var validActionTypes = map[string]bool{
+	// Current Figma plugin API action types (plugin-api >= 1.0.0)
+	"NODE": true, "BACK": true, "CLOSE": true, "URL": true,
+	"CONDITIONAL": true, "SET_VARIABLE": true, "SET_VARIABLE_MODE": true,
+	"UPDATE_MEDIA_RUNTIME": true,
+}
+
+func validateReaction(idx int, r map[string]any) string {
+	if trigger, ok := r["trigger"].(map[string]any); ok {
+		if msg := validateTriggerType(idx, trigger); msg != "" {
+			return msg
+		}
+	}
+	if action, ok := r["action"].(map[string]any); ok {
+		if msg := validateActionType(idx, action); msg != "" {
+			return msg
+		}
+	}
+	return ""
+}
+
+func validateTriggerType(idx int, trigger map[string]any) string {
+	t, _ := trigger["type"].(string)
+	if t != "" && !validTriggerTypes[t] {
+		return fmt.Sprintf("reactions[%d].trigger.type is invalid: %s", idx, t)
+	}
+	if t == "AFTER_TIMEOUT" {
+		if _, ok := trigger["timeout"].(float64); !ok {
+			return fmt.Sprintf("reactions[%d].trigger.timeout is required for AFTER_TIMEOUT and must be a number (milliseconds)", idx)
+		}
+	}
+	return ""
+}
+
+func validateActionType(idx int, action map[string]any) string {
+	t, _ := action["type"].(string)
+	if t != "" && !validActionTypes[t] {
+		return fmt.Sprintf("reactions[%d].action.type is invalid: %s", idx, t)
+	}
+	switch t {
+	case "NODE":
+		if nav, _ := action["navigation"].(string); nav == "" {
+			return fmt.Sprintf("reactions[%d].action.navigation is required for NODE (e.g. NAVIGATE, OVERLAY, SCROLL_TO, SWAP, CHANGE_TO)", idx)
+		}
+	case "URL":
+		if url, _ := action["url"].(string); url == "" {
+			return fmt.Sprintf("reactions[%d].action.url is required for URL", idx)
+		}
+	}
 	return ""
 }
 
