@@ -31,7 +31,7 @@ func TestNodeRoleName(t *testing.T) {
 // ── NewNode ───────────────────────────────────────────────────────────────────
 
 func TestNewNode_StartsUnknown(t *testing.T) {
-	n := NewNode(19940, "test")
+	n := NewNode("127.0.0.1", 19940, "test")
 	if n.Role() != RoleUnknown {
 		t.Errorf("new node role = %v, want UNKNOWN", n.Role())
 	}
@@ -41,7 +41,7 @@ func TestNewNode_StartsUnknown(t *testing.T) {
 
 func TestNodeBecomeLeader(t *testing.T) {
 	port := freePort(t)
-	n := NewNode(port, "test")
+	n := NewNode("127.0.0.1", port, "test")
 	t.Cleanup(n.Stop)
 
 	if err := n.BecomeLeader(); err != nil {
@@ -55,13 +55,13 @@ func TestNodeBecomeLeader(t *testing.T) {
 func TestNodeBecomeLeader_PortTaken(t *testing.T) {
 	port := freePort(t)
 
-	n1 := NewNode(port, "test")
+	n1 := NewNode("127.0.0.1", port, "test")
 	if err := n1.BecomeLeader(); err != nil {
 		t.Fatalf("first BecomeLeader: %v", err)
 	}
 	t.Cleanup(n1.Stop)
 
-	n2 := NewNode(port, "test")
+	n2 := NewNode("127.0.0.1", port, "test")
 	if err := n2.BecomeLeader(); err == nil {
 		n2.Stop()
 		t.Error("expected error when port is already taken")
@@ -70,7 +70,7 @@ func TestNodeBecomeLeader_PortTaken(t *testing.T) {
 
 func TestNodeBecomeLeader_Idempotent(t *testing.T) {
 	port := freePort(t)
-	n := NewNode(port, "test")
+	n := NewNode("127.0.0.1", port, "test")
 	t.Cleanup(n.Stop)
 
 	if err := n.BecomeLeader(); err != nil {
@@ -85,7 +85,7 @@ func TestNodeBecomeLeader_Idempotent(t *testing.T) {
 // ── BecomeFollower ────────────────────────────────────────────────────────────
 
 func TestNodeBecomeFollower(t *testing.T) {
-	n := NewNode(19940, "test")
+	n := NewNode("127.0.0.1", 19940, "test")
 	n.BecomeFollower()
 	if n.Role() != RoleFollower {
 		t.Errorf("role = %v, want FOLLOWER", n.Role())
@@ -93,7 +93,7 @@ func TestNodeBecomeFollower(t *testing.T) {
 }
 
 func TestNodeBecomeFollower_Idempotent(t *testing.T) {
-	n := NewNode(19940, "test")
+	n := NewNode("127.0.0.1", 19940, "test")
 	n.BecomeFollower()
 	n.BecomeFollower() // should not panic
 	if n.Role() != RoleFollower {
@@ -103,7 +103,7 @@ func TestNodeBecomeFollower_Idempotent(t *testing.T) {
 
 func TestNodeBecomeFollower_FromLeader(t *testing.T) {
 	port := freePort(t)
-	n := NewNode(port, "test")
+	n := NewNode("127.0.0.1", port, "test")
 
 	if err := n.BecomeLeader(); err != nil {
 		t.Fatalf("BecomeLeader: %v", err)
@@ -117,7 +117,7 @@ func TestNodeBecomeFollower_FromLeader(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 
 	// Port should be free now — a new leader can bind it.
-	n2 := NewNode(port, "test")
+	n2 := NewNode("127.0.0.1", port, "test")
 	if err := n2.BecomeLeader(); err != nil {
 		t.Fatalf("new node could not bind freed port: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestNodeBecomeFollower_FromLeader(t *testing.T) {
 
 func TestNodeStop_ResetsRole(t *testing.T) {
 	port := freePort(t)
-	n := NewNode(port, "test")
+	n := NewNode("127.0.0.1", port, "test")
 
 	if err := n.BecomeLeader(); err != nil {
 		t.Fatalf("BecomeLeader: %v", err)
@@ -140,7 +140,7 @@ func TestNodeStop_ResetsRole(t *testing.T) {
 }
 
 func TestNodeStop_Idempotent(t *testing.T) {
-	n := NewNode(19940, "test")
+	n := NewNode("127.0.0.1", 19940, "test")
 	n.Stop()
 	n.Stop() // should not panic
 }

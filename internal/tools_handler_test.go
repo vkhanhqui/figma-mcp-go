@@ -15,7 +15,7 @@ import (
 func newTestServer(t *testing.T) (*server.MCPServer, *Node) {
 	t.Helper()
 	s := server.NewMCPServer("test", "0.0.1")
-	node := NewNode(19940, "test")
+	node := NewNode("127.0.0.1", 19940, "test")
 	RegisterTools(s, node)
 	RegisterPrompts(s)
 	return s, node
@@ -41,7 +41,7 @@ func callTool(t *testing.T, s *server.MCPServer, name string, args map[string]an
 
 func TestRegisterTools_Smoke(t *testing.T) {
 	s := server.NewMCPServer("test", "0.0.1")
-	RegisterTools(s, NewNode(19940, "test"))
+	RegisterTools(s, NewNode("127.0.0.1", 19940, "test"))
 }
 
 func TestRegisterPrompts_Smoke(t *testing.T) {
@@ -52,7 +52,7 @@ func TestRegisterPrompts_Smoke(t *testing.T) {
 // ── makeHandler ───────────────────────────────────────────────────────────────
 
 func TestMakeHandler_UnknownNode(t *testing.T) {
-	node := NewNode(19940, "test")
+	node := NewNode("127.0.0.1", 19940, "test")
 	handler := makeHandler(node, "get_document", nil, nil)
 	result, err := handler(context.Background(), mcp.CallToolRequest{})
 	if err != nil {
