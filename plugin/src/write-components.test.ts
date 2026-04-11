@@ -20,7 +20,7 @@ beforeEach(() => {
   mockNodes = {};
   (globalThis as any).figma = {
     get currentPage() { return { id: "0:1", name: "Page 1" }; },
-    set currentPage(page: any) { navigatedTo = page; },
+    setCurrentPageAsync: async (page: any) => { navigatedTo = page; },
     getNodeByIdAsync: async (id: string) => mockNodes[id] ?? null,
     group: (nodes: any[], parent: any) => {
       const group = { id: "grp:1", name: "Group 1", type: "GROUP", children: [...nodes] };
