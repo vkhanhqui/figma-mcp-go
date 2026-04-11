@@ -6,8 +6,8 @@
   "ui": "dist/index.html",
   "permissions": [],
   "networkAccess": {
-    "allowedDomains": ["ws://localhost:1994", "https://avatars.githubusercontent.com"],
-    "reasoning": "Connects to local MCP server via WebSocket to stream Figma document data to AI tools"
+    "allowedDomains": ["*"],
+    "reasoning": "The server host and port are user-configurable (defaults to ws://127.0.0.1:1994), so any origin must be allowed to support custom addresses"
   },
   "documentAccess": "dynamic-page",
   "editorType": ["figma", "dev"],

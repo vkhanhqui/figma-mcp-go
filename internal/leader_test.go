@@ -177,7 +177,7 @@ func TestLeaderPingEndpoint(t *testing.T) {
 	}
 	t.Cleanup(l.Stop)
 
-	f := NewFollower("http://localhost:" + itoa(port))
+	f := NewFollower("http://127.0.0.1:" + itoa(port))
 	if !f.Ping(t.Context()) {
 		t.Error("expected ping to succeed for running leader")
 	}

@@ -46,7 +46,7 @@ func TestElectionTick_LeaderDoesNothing(t *testing.T) {
 	}
 	t.Cleanup(n.Stop)
 
-	e := NewElection("127.0.0.1", port,n)
+	e := NewElection("127.0.0.1", port, n)
 	if err := e.tick(context.Background()); err != nil {
 		t.Errorf("tick for LEADER: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestElectionTick_FollowerDeadLeader_TakesOver(t *testing.T) {
 	n.BecomeFollower()
 	t.Cleanup(n.Stop)
 
-	e := NewElection("127.0.0.1", port,n)
+	e := NewElection("127.0.0.1", port, n)
 	if err := e.tick(context.Background()); err != nil {
 		t.Errorf("tick: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestElectionTick_UnknownBecomesLeader(t *testing.T) {
 	// Role stays UNKNOWN — no BecomeLeader/BecomeFollower called.
 	t.Cleanup(n.Stop)
 
-	e := NewElection("127.0.0.1", port,n)
+	e := NewElection("127.0.0.1", port, n)
 	if err := e.tick(context.Background()); err != nil {
 		t.Errorf("tick: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestElectionStart_Stop(t *testing.T) {
 	n := NewNode("127.0.0.1", port, "test")
 	t.Cleanup(n.Stop)
 
-	e := NewElection("127.0.0.1", port,n)
+	e := NewElection("127.0.0.1", port, n)
 	ctx := context.Background()
 
 	if err := e.Start(ctx); err != nil {
@@ -159,8 +159,8 @@ func TestElection_ConcurrentStart_OneLeader(t *testing.T) {
 	t.Cleanup(n1.Stop)
 	t.Cleanup(n2.Stop)
 
-	e1 := NewElection("127.0.0.1", port,n1)
-	e2 := NewElection("127.0.0.1", port,n2)
+	e1 := NewElection("127.0.0.1", port, n1)
+	e2 := NewElection("127.0.0.1", port, n2)
 	t.Cleanup(e1.Stop)
 	t.Cleanup(e2.Stop)
 
@@ -209,7 +209,7 @@ func TestElection_ConcurrentTakeover_OneLeader(t *testing.T) {
 	for i := range nodes {
 		nodes[i] = NewNode("127.0.0.1", port, "test")
 		nodes[i].BecomeFollower()
-		elections[i] = NewElection("127.0.0.1", port,nodes[i])
+		elections[i] = NewElection("127.0.0.1", port, nodes[i])
 		t.Cleanup(nodes[i].Stop)
 	}
 

@@ -47,7 +47,7 @@ func NewBridge() *Bridge {
 // replaces the old one (same behaviour as the TypeScript version).
 func (b *Bridge) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true, // plugin connects from localhost
+		InsecureSkipVerify: true, // skip Origin check — plugin connects via Figma's sandbox
 	})
 	if err != nil {
 		bridgeLogger.Printf("upgrade error: %v", err)
