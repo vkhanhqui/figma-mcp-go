@@ -1,6 +1,18 @@
 import { hexToRgb } from "./write-helpers";
 
 const parseVariableValue = (type: string, value: any): VariableValue => {
+  // ✅ Handle VARIABLE_ALIAS first
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed?.type === "VARIABLE_ALIAS" && parsed?.id) {
+        return { type: "VARIABLE_ALIAS", id: parsed.id };
+      }
+    } catch {}
+  } else if (value?.type === "VARIABLE_ALIAS" && value?.id) {
+    return { type: "VARIABLE_ALIAS", id: value.id };
+  }
+
   if (type === "COLOR") {
     if (typeof value === "string") {
       const { r, g, b, a } = hexToRgb(value);
@@ -8,9 +20,11 @@ const parseVariableValue = (type: string, value: any): VariableValue => {
     }
     return value as RGBA;
   }
-  if (type === "FLOAT") return typeof value === "number" ? value : parseFloat(String(value));
-  if (type === "BOOLEAN") return value === true || value === "true";
-  return String(value); // STRING
+
+  if (type === "FLOAT") return Number(value);
+  if (type === "BOOLEAN") return Boolean(value);
+
+  return String(value);
 };
 
 export const handleWriteVariableRequest = async (request: any) => {
