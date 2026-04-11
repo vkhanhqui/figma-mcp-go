@@ -67,7 +67,7 @@ export const handleWriteComponentRequest = async (request: any) => {
       } else {
         throw new Error("pageId or pageName is required");
       }
-      figma.currentPage = page;
+      await figma.setCurrentPageAsync(page);
       return {
         type: request.type,
         requestId: request.requestId,

@@ -188,7 +188,7 @@ export const handleWriteStyleRequest = async (request: any) => {
         }
         case "TEXT":
           if (!("textStyleId" in node)) throw new Error(`Node ${nodeId} does not support text styles`);
-          n.textStyleId = p.styleId;
+          await n.setTextStyleIdAsync(p.styleId);          
           break;
         case "EFFECT":
           if (!("effectStyleId" in node)) throw new Error(`Node ${nodeId} does not support effect styles`);
