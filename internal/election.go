@@ -20,12 +20,12 @@ type Election struct {
 	cancel   context.CancelFunc
 }
 
-// NewElection creates an Election for the given port and node.
-func NewElection(port int, node *Node) *Election {
+// NewElection creates an Election for the given ip, port, and node.
+func NewElection(ip string, port int, node *Node) *Election {
 	return &Election{
 		port:     port,
 		node:     node,
-		follower: NewFollower("http://localhost:" + itoa(port)),
+		follower: NewFollower("http://" + ip + ":" + itoa(port)),
 	}
 }
 

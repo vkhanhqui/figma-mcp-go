@@ -17,8 +17,7 @@ const sendStatus = () => {
 const handleRequest = async (request: any) => {
   try {
     const result =
-      (await handleReadRequest(request)) ??
-      (await handleWriteRequest(request));
+      (await handleReadRequest(request)) ?? (await handleWriteRequest(request));
     if (result === null)
       throw new Error(`Unknown request type: ${request.type}`);
     return result;
@@ -31,7 +30,7 @@ const handleRequest = async (request: any) => {
   }
 };
 
-figma.showUI(__html__, { width: 320, height: 210 });
+figma.showUI(__html__, { width: 320, height: 230 });
 sendStatus();
 
 figma.on("selectionchange", () => {
@@ -45,6 +44,22 @@ figma.on("currentpagechange", () => {
 figma.ui.onmessage = async (message) => {
   if (message.type === "ui-ready") {
     sendStatus();
+    return;
+  }
+  if (message.type === "get_ws_config") {
+    const config = await figma.clientStorage.getAsync("ws_config");
+    figma.ui.postMessage({
+      type: "ws_config",
+      host: config?.host ?? "127.0.0.1",
+      port: config?.port ?? "1994",
+    });
+    return;
+  }
+  if (message.type === "save_ws_config") {
+    await figma.clientStorage.setAsync("ws_config", {
+      host: message.host,
+      port: message.port,
+    });
     return;
   }
   if (message.type === "server-request") {

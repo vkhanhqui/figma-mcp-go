@@ -23,15 +23,17 @@ var leaderLogger = log.New(os.Stderr, "[leader] ", 0)
 //	/ping — Health check (GET)
 //	/rpc  — JSON RPC for follower tool calls (POST)
 type Leader struct {
+	ip      string
 	port    int
 	bridge  *Bridge
 	server  *http.Server
 	version string
 }
 
-// NewLeader creates a Leader. Call Start() to bind the port.
-func NewLeader(port int, version string) *Leader {
+// NewLeader creates a Leader. Call Start() to bind the ip:port.
+func NewLeader(ip string, port int, version string) *Leader {
 	return &Leader{
+		ip:      ip,
 		port:    port,
 		bridge:  NewBridge(),
 		version: version,
@@ -46,7 +48,7 @@ func (l *Leader) GetBridge() *Bridge {
 // Start binds the port and begins serving. Returns an error immediately
 // if the port is already in use (EADDRINUSE → caller detects another leader).
 func (l *Leader) Start() error {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", l.port))
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", l.ip, l.port))
 	if err != nil {
 		return err // includes EADDRINUSE
 	}
@@ -65,7 +67,7 @@ func (l *Leader) Start() error {
 		}
 	}()
 
-	leaderLogger.Printf("listening on :%d", l.port)
+	leaderLogger.Printf("listening on %s:%d", l.ip, l.port)
 	return nil
 }
 

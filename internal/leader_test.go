@@ -12,7 +12,7 @@ import (
 // ── handlePing ────────────────────────────────────────────────────────────────
 
 func TestLeaderHandlePing_OK(t *testing.T) {
-	l := NewLeader(0, "v1.2.3")
+	l := NewLeader("127.0.0.1", 0, "v1.2.3")
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	w := httptest.NewRecorder()
@@ -35,7 +35,7 @@ func TestLeaderHandlePing_OK(t *testing.T) {
 }
 
 func TestLeaderHandlePing_MethodNotAllowed(t *testing.T) {
-	l := NewLeader(0, "")
+	l := NewLeader("127.0.0.1", 0, "")
 
 	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
 		req := httptest.NewRequest(method, "/ping", nil)
@@ -51,7 +51,7 @@ func TestLeaderHandlePing_MethodNotAllowed(t *testing.T) {
 // ── handleRPC ─────────────────────────────────────────────────────────────────
 
 func TestLeaderHandleRPC_MethodNotAllowed(t *testing.T) {
-	l := NewLeader(0, "")
+	l := NewLeader("127.0.0.1", 0, "")
 
 	req := httptest.NewRequest(http.MethodGet, "/rpc", nil)
 	w := httptest.NewRecorder()
@@ -63,7 +63,7 @@ func TestLeaderHandleRPC_MethodNotAllowed(t *testing.T) {
 }
 
 func TestLeaderHandleRPC_InvalidJSON(t *testing.T) {
-	l := NewLeader(0, "")
+	l := NewLeader("127.0.0.1", 0, "")
 
 	req := httptest.NewRequest(http.MethodPost, "/rpc", bytes.NewBufferString("{bad json}"))
 	w := httptest.NewRecorder()
@@ -80,7 +80,7 @@ func TestLeaderHandleRPC_InvalidJSON(t *testing.T) {
 }
 
 func TestLeaderHandleRPC_ValidationError(t *testing.T) {
-	l := NewLeader(0, "")
+	l := NewLeader("127.0.0.1", 0, "")
 
 	// set_text with nodeId but missing text → validation error
 	body, _ := json.Marshal(RPCRequest{
@@ -103,7 +103,7 @@ func TestLeaderHandleRPC_ValidationError(t *testing.T) {
 }
 
 func TestLeaderHandleRPC_BridgeNotConnected(t *testing.T) {
-	l := NewLeader(0, "")
+	l := NewLeader("127.0.0.1", 0, "")
 
 	// get_document has no required params — passes validation, hits bridge
 	body, _ := json.Marshal(RPCRequest{Tool: "get_document"})
@@ -126,7 +126,7 @@ func TestLeaderHandleRPC_BridgeNotConnected(t *testing.T) {
 
 func TestLeaderStart_BindsPort(t *testing.T) {
 	port := freePort(t)
-	l := NewLeader(port, "")
+	l := NewLeader("127.0.0.1", port, "")
 
 	if err := l.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -134,7 +134,7 @@ func TestLeaderStart_BindsPort(t *testing.T) {
 	t.Cleanup(l.Stop)
 
 	// Second leader on the same port must fail.
-	l2 := NewLeader(port, "")
+	l2 := NewLeader("127.0.0.1", port, "")
 	if err := l2.Start(); err == nil {
 		l2.Stop()
 		t.Error("expected error when binding already-used port")
@@ -143,7 +143,7 @@ func TestLeaderStart_BindsPort(t *testing.T) {
 
 func TestLeaderStop_FreesPort(t *testing.T) {
 	port := freePort(t)
-	l := NewLeader(port, "")
+	l := NewLeader("127.0.0.1", port, "")
 
 	if err := l.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -153,7 +153,7 @@ func TestLeaderStop_FreesPort(t *testing.T) {
 	// Allow OS to release the port.
 	time.Sleep(20 * time.Millisecond)
 
-	l2 := NewLeader(port, "")
+	l2 := NewLeader("127.0.0.1", port, "")
 	if err := l2.Start(); err != nil {
 		t.Fatalf("port should be free after Stop: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestLeaderStop_FreesPort(t *testing.T) {
 }
 
 func TestLeaderStop_Idempotent(t *testing.T) {
-	l := NewLeader(0, "")
+	l := NewLeader("127.0.0.1", 0, "")
 	// Stop on a never-started leader should not panic.
 	l.Stop()
 	l.Stop()
@@ -171,13 +171,13 @@ func TestLeaderStop_Idempotent(t *testing.T) {
 
 func TestLeaderPingEndpoint(t *testing.T) {
 	port := freePort(t)
-	l := NewLeader(port, "test-ver")
+	l := NewLeader("127.0.0.1", port, "test-ver")
 	if err := l.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(l.Stop)
 
-	f := NewFollower("http://localhost:" + itoa(port))
+	f := NewFollower("http://127.0.0.1:" + itoa(port))
 	if !f.Ping(t.Context()) {
 		t.Error("expected ping to succeed for running leader")
 	}

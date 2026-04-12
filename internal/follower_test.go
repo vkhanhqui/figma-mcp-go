@@ -28,7 +28,7 @@ func TestFollowerPing_Success(t *testing.T) {
 
 func TestFollowerPing_ServerDown(t *testing.T) {
 	// Use a port that nothing is listening on.
-	f := NewFollower("http://localhost:1")
+	f := NewFollower("http://127.0.0.1:1")
 	if f.Ping(context.Background()) {
 		t.Error("expected Ping to return false when server is unreachable")
 	}
@@ -113,7 +113,7 @@ func TestFollowerSend_InvalidJSON(t *testing.T) {
 }
 
 func TestFollowerSend_ServerDown(t *testing.T) {
-	f := NewFollower("http://localhost:1")
+	f := NewFollower("http://127.0.0.1:1")
 	_, err := f.Send(context.Background(), "get_node", []string{"1:1"}, nil)
 	if err == nil {
 		t.Error("expected error when server is unreachable")

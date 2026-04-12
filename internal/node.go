@@ -15,6 +15,7 @@ var nodeLogger = log.New(os.Stderr, "[node] ", 0)
 type Node struct {
 	mu       sync.RWMutex
 	role     Role
+	ip       string
 	port     int
 	leader   *Leader
 	follower *Follower
@@ -22,12 +23,13 @@ type Node struct {
 }
 
 // NewNode creates a Node in the Unknown role.
-func NewNode(port int, version string) *Node {
+func NewNode(ip string, port int, version string) *Node {
 	return &Node{
+		ip:       ip,
 		port:     port,
 		role:     RoleUnknown,
 		version:  version,
-		follower: NewFollower(fmt.Sprintf("http://localhost:%d", port)),
+		follower: NewFollower(fmt.Sprintf("http://%s:%d", ip, port)),
 	}
 }
 
@@ -86,7 +88,7 @@ func (n *Node) BecomeLeader() error {
 		return nil
 	}
 
-	leader := NewLeader(n.port, n.version)
+	leader := NewLeader(n.ip, n.port, n.version)
 	if err := leader.Start(); err != nil {
 		return err
 	}
