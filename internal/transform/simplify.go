@@ -140,7 +140,7 @@ func walkNode(node map[string]any, ctx *TraversalContext, opts Options) *Simplif
 		if effectsID, _ := buildSimplifiedEffects(node, ctx); effectsID != "" {
 			sn.Effects = effectsID
 		}
-		fallthrough
+		// fallthrough to get text
 	case VisualsOnly:
 		// Layout
 		if layoutID, layout := buildSimplifiedLayout(node, ctx); layoutID != "" {
@@ -162,12 +162,14 @@ func walkNode(node map[string]any, ctx *TraversalContext, opts Options) *Simplif
 		if effectsID, _ := buildSimplifiedEffects(node, ctx); effectsID != "" {
 			sn.Effects = effectsID
 		}
+		// NO fallthrough - VisualsOnly does NOT get text
 	case ContentOnly:
-		// Text only
+		// Text only - handled below
 	}
 
-	// Text (runs for ContentOnly, LayoutAndText via fallthrough from AllExtractors/LayoutAndText)
-	if isTextNode(node) {
+	// Text extraction: AllExtractors, LayoutAndText, and ContentOnly get text
+	// VisualsOnly does NOT get text
+	if opts.Extractors != VisualsOnly && isTextNode(node) {
 		sn.Text = buildFormattedText(node)
 		if styleID := extractTextStyle(node, ctx); styleID != "" {
 			sn.TextStyle = styleID
