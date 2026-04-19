@@ -140,7 +140,7 @@ func walkNode(node map[string]any, ctx *TraversalContext, opts Options) *Simplif
 		if effectsID, _ := buildSimplifiedEffects(node, ctx); effectsID != "" {
 			sn.Effects = effectsID
 		}
-		// fallthrough to get text
+		// Text extraction happens after switch for AllExtractors/LayoutAndText
 	case VisualsOnly:
 		// Layout
 		if layoutID, layout := buildSimplifiedLayout(node, ctx); layoutID != "" {
