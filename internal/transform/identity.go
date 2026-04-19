@@ -19,7 +19,6 @@ func hasValue(v any) bool {
 	default:
 		return false
 	}
-	return true
 }
 
 // isVisible reports whether the node is visible.
