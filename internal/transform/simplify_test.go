@@ -115,8 +115,8 @@ func TestParsePaint_Solid(t *testing.T) {
 		},
 	}
 	result := parsePaint(paint)
-	if result == "" {
-		t.Error("expected non-empty result for SOLID paint")
+	if result != "#3A82F4" {
+		t.Errorf("expected #3A82F4, got %s", result)
 	}
 }
 
@@ -131,8 +131,8 @@ func TestParsePaint_SolidWithOpacity(t *testing.T) {
 		"opacity": 0.5,
 	}
 	result := parsePaint(paint)
-	if result == "" {
-		t.Error("expected non-empty result for SOLID paint with opacity")
+	if result != "rgba(58,130,244,0.50)" {
+		t.Errorf("expected rgba(58,130,244,0.50), got %s", result)
 	}
 }
 
