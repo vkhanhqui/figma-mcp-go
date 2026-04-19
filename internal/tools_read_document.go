@@ -10,7 +10,16 @@ import (
 func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 	s.AddTool(mcp.NewTool("get_document",
 		mcp.WithDescription("Get the full node tree of the current page (not the whole file — only the active page). Returns all nodes recursively and can be very large. Prefer get_design_context for exploration or when token efficiency matters."),
-	), makeHandler(node, "get_document", nil, nil))
+		mcp.WithBoolean("simplify",
+			mcp.Description("Apply simplification to produce a token-efficient LLM-friendly response"),
+		),
+		mcp.WithNumber("simplifyDepth",
+			mcp.Description("Maximum depth for simplification (0 = unlimited)"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		resp, err := node.Send(ctx, "get_document", nil, nil)
+		return renderResponseWithSimplify(resp, err, req)
+	})
 
 	s.AddTool(mcp.NewTool("get_pages",
 		mcp.WithDescription("List all pages in the document with their IDs and names. Lightweight alternative to get_document."),
@@ -22,7 +31,16 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 
 	s.AddTool(mcp.NewTool("get_selection",
 		mcp.WithDescription("Get the nodes currently selected in Figma. Returns an empty array if nothing is selected. Use get_design_context or get_node to retrieve deeper detail about a specific node by ID."),
-	), makeHandler(node, "get_selection", nil, nil))
+		mcp.WithBoolean("simplify",
+			mcp.Description("Apply simplification to produce a token-efficient LLM-friendly response"),
+		),
+		mcp.WithNumber("simplifyDepth",
+			mcp.Description("Maximum depth for simplification (0 = unlimited)"),
+		),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		resp, err := node.Send(ctx, "get_selection", nil, nil)
+		return renderResponseWithSimplify(resp, err, req)
+	})
 
 	s.AddTool(mcp.NewTool("get_node",
 		mcp.WithDescription("Get a single node by ID with full detail. Use get_nodes_info to fetch multiple nodes in one round-trip instead of calling this repeatedly. Node ID must be colon format e.g. '4029:12345', never hyphens."),
@@ -30,10 +48,16 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 			mcp.Required(),
 			mcp.Description("Node ID in colon format e.g. '4029:12345'"),
 		),
+		mcp.WithBoolean("simplify",
+			mcp.Description("Apply simplification to produce a token-efficient LLM-friendly response"),
+		),
+		mcp.WithNumber("simplifyDepth",
+			mcp.Description("Maximum depth for simplification (0 = unlimited)"),
+		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		nodeID, _ := req.GetArguments()["nodeId"].(string)
 		resp, err := node.Send(ctx, "get_node", []string{nodeID}, nil)
-		return renderResponse(resp, err)
+		return renderResponseWithSimplify(resp, err, req)
 	})
 
 	s.AddTool(mcp.NewTool("get_nodes_info",
@@ -43,11 +67,17 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 			mcp.Description("List of node IDs in colon format e.g. ['4029:12345', '4029:67890']"),
 			mcp.WithStringItems(),
 		),
+		mcp.WithBoolean("simplify",
+			mcp.Description("Apply simplification to produce a token-efficient LLM-friendly response"),
+		),
+		mcp.WithNumber("simplifyDepth",
+			mcp.Description("Maximum depth for simplification (0 = unlimited)"),
+		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		raw, _ := req.GetArguments()["nodeIds"].([]interface{})
 		nodeIDs := toStringSlice(raw)
 		resp, err := node.Send(ctx, "get_nodes_info", nodeIDs, nil)
-		return renderResponse(resp, err)
+		return renderResponseWithSimplify(resp, err, req)
 	})
 
 	s.AddTool(mcp.NewTool("get_design_context",
@@ -61,6 +91,12 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 		mcp.WithBoolean("dedupe_components",
 			mcp.Description("When true, INSTANCE nodes are serialized compactly (mainComponentId + componentProperties + overrides array of differing text/nested content) and unique component definitions are collected once in a top-level componentDefs map. Highly token-efficient for screens with many repeated component instances."),
 		),
+		mcp.WithBoolean("simplify",
+			mcp.Description("Apply simplification to produce a token-efficient LLM-friendly response"),
+		),
+		mcp.WithNumber("simplifyDepth",
+			mcp.Description("Maximum depth for simplification (0 = unlimited)"),
+		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		params := map[string]interface{}{}
 		if d, ok := req.GetArguments()["depth"].(float64); ok && d > 0 {
@@ -73,7 +109,7 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 			params["dedupeComponents"] = true
 		}
 		resp, err := node.Send(ctx, "get_design_context", nil, params)
-		return renderResponse(resp, err)
+		return renderResponseWithSimplify(resp, err, req)
 	})
 
 	s.AddTool(mcp.NewTool("search_nodes",
@@ -92,6 +128,12 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 		mcp.WithNumber("limit",
 			mcp.Description("Maximum results to return (default: 50)"),
 		),
+		mcp.WithBoolean("simplify",
+			mcp.Description("Apply simplification to produce a token-efficient LLM-friendly response"),
+		),
+		mcp.WithNumber("simplifyDepth",
+			mcp.Description("Maximum depth for simplification (0 = unlimited)"),
+		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		params := map[string]interface{}{
 			"query": req.GetArguments()["query"],
@@ -106,7 +148,7 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 			params["limit"] = limit
 		}
 		resp, err := node.Send(ctx, "search_nodes", nil, params)
-		return renderResponse(resp, err)
+		return renderResponseWithSimplify(resp, err, req)
 	})
 
 	s.AddTool(mcp.NewTool("scan_text_nodes",
@@ -115,10 +157,16 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 			mcp.Required(),
 			mcp.Description("Root node ID to scan from, colon format e.g. '4029:12345'"),
 		),
+		mcp.WithBoolean("simplify",
+			mcp.Description("Apply simplification to produce a token-efficient LLM-friendly response"),
+		),
+		mcp.WithNumber("simplifyDepth",
+			mcp.Description("Maximum depth for simplification (0 = unlimited)"),
+		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		nodeID, _ := req.GetArguments()["nodeId"].(string)
 		resp, err := node.Send(ctx, "scan_text_nodes", nil, map[string]interface{}{"nodeId": nodeID})
-		return renderResponse(resp, err)
+		return renderResponseWithSimplify(resp, err, req)
 	})
 
 	s.AddTool(mcp.NewTool("scan_nodes_by_types",
@@ -132,6 +180,12 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 			mcp.Description("Node types to find e.g. ['FRAME', 'COMPONENT', 'INSTANCE']"),
 			mcp.WithStringItems(),
 		),
+		mcp.WithBoolean("simplify",
+			mcp.Description("Apply simplification to produce a token-efficient LLM-friendly response"),
+		),
+		mcp.WithNumber("simplifyDepth",
+			mcp.Description("Maximum depth for simplification (0 = unlimited)"),
+		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		nodeID, _ := req.GetArguments()["nodeId"].(string)
 		raw, _ := req.GetArguments()["types"].([]interface{})
@@ -139,7 +193,7 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 			"nodeId": nodeID,
 			"types":  raw,
 		})
-		return renderResponse(resp, err)
+		return renderResponseWithSimplify(resp, err, req)
 	})
 
 	s.AddTool(mcp.NewTool("get_reactions",

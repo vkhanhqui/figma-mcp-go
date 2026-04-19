@@ -13,6 +13,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/vkhanhqui/figma-mcp-go/internal/prompts"
+	"github.com/vkhanhqui/figma-mcp-go/internal/transform"
 )
 
 // RegisterTools registers all MCP tools on the server.
@@ -49,6 +50,50 @@ func renderResponse(resp BridgeResponse, err error) (*mcp.CallToolResult, error)
 		return mcp.NewToolResultError(fmt.Sprintf("marshal response: %v", err)), nil
 	}
 	return mcp.NewToolResultText(string(text)), nil
+}
+
+// renderSimplifiedResponse applies simplification to the response data.
+func renderSimplifiedResponse(resp BridgeResponse, err error, opts transform.Options) (*mcp.CallToolResult, error) {
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	if resp.Error != "" {
+		return mcp.NewToolResultError(resp.Error), nil
+	}
+
+	simplified, simplifyErr := transform.Simplify(resp.Data, opts)
+	if simplifyErr != nil {
+		// Fall back to raw JSON on simplification error (per spec)
+		text, marshalErr := json.Marshal(resp.Data)
+		if marshalErr != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("marshal response: %v", marshalErr)), nil
+		}
+		return mcp.NewToolResultText(string(text)), nil
+	}
+
+	text, err := json.Marshal(simplified)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("marshal simplified response: %v", err)), nil
+	}
+	return mcp.NewToolResultText(string(text)), nil
+}
+
+// renderResponseWithSimplify checks for simplify param and routes accordingly.
+func renderResponseWithSimplify(resp BridgeResponse, err error, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	simplify, _ := req.GetArguments()["simplify"].(bool)
+	if !simplify {
+		return renderResponse(resp, err)
+	}
+
+	maxDepth := 0
+	if md, ok := req.GetArguments()["simplifyDepth"].(float64); ok {
+		maxDepth = int(md)
+	}
+
+	return renderSimplifiedResponse(resp, err, transform.Options{
+		MaxDepth:    maxDepth,
+		Extractors: transform.AllExtractors,
+	})
 }
 
 // toStringSlice converts []interface{} to []string.
