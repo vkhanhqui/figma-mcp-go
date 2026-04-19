@@ -16,6 +16,8 @@ func hasValue(v any) bool {
 		return len(val) > 0
 	case map[string]any:
 		return len(val) > 0
+	default:
+		return false
 	}
 	return true
 }

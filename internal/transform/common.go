@@ -17,12 +17,15 @@ func generateVarId(prefix string, counter int) string {
 }
 
 // stableStringify produces a canonical JSON string for deduplication.
+// Returns an empty string if marshaling fails, which is intentional since
+// an empty string as a deduplication key will simply not match any existing entry.
 func stableStringify(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
 
 // mergeMaps merges src into dst, returning dst.
+// Note: This mutates dst in place.
 func mergeMaps(dst, src map[string]any) map[string]any {
 	for k, v := range src {
 		dst[k] = v
