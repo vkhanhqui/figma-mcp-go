@@ -15,6 +15,9 @@ CLAUDE.md
 plugin/node_modules/
 plugin/dist/
 
+# Worktrees
+.worktrees/
+
 # OS
 .DS_Store
 
