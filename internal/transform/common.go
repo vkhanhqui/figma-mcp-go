@@ -3,12 +3,12 @@ package transform
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 )
 
 // pixelRound rounds a pixel value to 2 decimal places.
 func pixelRound(v float64) float64 {
-	rounded := int(v*100+0.5) // fast alternative to math.Round
-	return float64(rounded) / 100
+	return math.Round(v*100) / 100
 }
 
 // generateVarId generates a deterministic variable ID from a prefix and value.

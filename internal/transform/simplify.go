@@ -86,6 +86,26 @@ func simplifyArray(arr []any, opts Options) (*SimplifiedDesign, error) {
 	return &SimplifiedDesign{Nodes: nodes, GlobalVars: ctx.Vars}, nil
 }
 
+// runVisualsExtractors applies layout, fills, strokes, and effects extractors.
+func runVisualsExtractors(node map[string]any, sn *SimplifiedNode, ctx *TraversalContext) {
+	if layoutID, layout := buildSimplifiedLayout(node, ctx); layoutID != "" {
+		ctx.Vars.Layouts[layoutID] = *layout
+		sn.Layout = layoutID
+	}
+
+	if fillsID, _ := buildSimplifiedFills(node, ctx); fillsID != "" {
+		sn.Fills = fillsID
+	}
+
+	if strokeID, _ := buildSimplifiedStrokes(node, ctx); strokeID != "" {
+		sn.Strokes = strokeID
+	}
+
+	if effectsID, _ := buildSimplifiedEffects(node, ctx); effectsID != "" {
+		sn.Effects = effectsID
+	}
+}
+
 // walkNode recursively transforms a raw node into SimplifiedNode.
 func walkNode(node map[string]any, ctx *TraversalContext, opts Options) *SimplifiedNode {
 	sn := &SimplifiedNode{
@@ -119,52 +139,9 @@ func walkNode(node map[string]any, ctx *TraversalContext, opts Options) *Simplif
 
 	// Extractors
 	switch opts.Extractors {
-	case AllExtractors, LayoutAndText:
-		// Layout
-		if layoutID, layout := buildSimplifiedLayout(node, ctx); layoutID != "" {
-			ctx.Vars.Layouts[layoutID] = *layout
-			sn.Layout = layoutID
-		}
-
-		// Fills
-		if fillsID, _ := buildSimplifiedFills(node, ctx); fillsID != "" {
-			sn.Fills = fillsID
-		}
-
-		// Strokes (stored in fills map with stroke_ prefix for now)
-		if strokeID, strokeVal := buildSimplifiedStrokes(node, ctx); strokeID != "" {
-			ctx.Vars.Fills["stroke_"+strokeID[5:]] = strokeVal
-		}
-
-		// Effects
-		if effectsID, _ := buildSimplifiedEffects(node, ctx); effectsID != "" {
-			sn.Effects = effectsID
-		}
-		// Text extraction happens after switch for AllExtractors/LayoutAndText
-	case VisualsOnly:
-		// Layout
-		if layoutID, layout := buildSimplifiedLayout(node, ctx); layoutID != "" {
-			ctx.Vars.Layouts[layoutID] = *layout
-			sn.Layout = layoutID
-		}
-
-		// Fills
-		if fillsID, _ := buildSimplifiedFills(node, ctx); fillsID != "" {
-			sn.Fills = fillsID
-		}
-
-		// Strokes (stored in fills map with stroke_ prefix for now)
-		if strokeID, strokeVal := buildSimplifiedStrokes(node, ctx); strokeID != "" {
-			ctx.Vars.Fills["stroke_"+strokeID[5:]] = strokeVal
-		}
-
-		// Effects
-		if effectsID, _ := buildSimplifiedEffects(node, ctx); effectsID != "" {
-			sn.Effects = effectsID
-		}
-		// NO fallthrough - VisualsOnly does NOT get text
+	case AllExtractors, LayoutAndText, VisualsOnly:
+		runVisualsExtractors(node, sn, ctx)
 	case ContentOnly:
-		// Text only - handled below
 	}
 
 	// Text extraction: AllExtractors, LayoutAndText, and ContentOnly get text

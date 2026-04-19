@@ -11,7 +11,7 @@ func TestSimplify_SingleFrame(t *testing.T) {
 		"type": "FRAME",
 		"fills": []any{
 			map[string]any{
-				"type": "SOLID",
+				"type":  "SOLID",
 				"color": map[string]any{"r": 0.23, "g": 0.51, "b": 0.96},
 			},
 		},
@@ -105,6 +105,25 @@ func TestPixelRound(t *testing.T) {
 	}
 }
 
+func TestPixelRound_Negative(t *testing.T) {
+	tests := []struct {
+		input    float64
+		expected float64
+	}{
+		{-0.006, -0.01},
+		{-123.456, -123.46},
+		{-0.5, -0.5},
+		{-2.0, -2.0},
+	}
+
+	for _, tt := range tests {
+		result := pixelRound(tt.input)
+		if result != tt.expected {
+			t.Errorf("pixelRound(%f) = %f; want %f", tt.input, result, tt.expected)
+		}
+	}
+}
+
 func TestParsePaint_Solid(t *testing.T) {
 	paint := map[string]any{
 		"type": "SOLID",
@@ -138,10 +157,10 @@ func TestParsePaint_SolidWithOpacity(t *testing.T) {
 
 func TestBuildSimplifiedLayout_Row(t *testing.T) {
 	node := map[string]any{
-		"type":        "FRAME",
-		"layoutMode":  "HORIZONTAL",
-		"spacing":     8.0,
-		"paddingTop":  16.0,
+		"type":       "FRAME",
+		"layoutMode": "HORIZONTAL",
+		"spacing":    8.0,
+		"paddingTop": 16.0,
 	}
 	ctx := &TraversalContext{
 		Vars: &GlobalVars{
@@ -210,6 +229,56 @@ func TestIsVisible(t *testing.T) {
 		if result != tt.expected {
 			t.Errorf("isVisible(%v) = %v; want %v", tt.node, result, tt.expected)
 		}
+	}
+}
+
+func TestBuildSimplifiedStrokes(t *testing.T) {
+	node := map[string]any{
+		"type": "FRAME",
+		"strokes": []any{
+			map[string]any{
+				"type":  "SOLID",
+				"color": map[string]any{"r": 1.0, "g": 0.0, "b": 0.0},
+			},
+		},
+	}
+	ctx := &TraversalContext{Vars: &GlobalVars{Strokes: make(map[string]any)}}
+	id, val := buildSimplifiedStrokes(node, ctx)
+	if id == "" {
+		t.Error("expected stroke id")
+	}
+	if val == nil {
+		t.Error("expected stroke value")
+	}
+	if ctx.Vars.Strokes[id] == nil {
+		t.Error("stroke not stored in Strokes map")
+	}
+}
+
+func TestSimplify_WithStrokes(t *testing.T) {
+	input := map[string]any{
+		"id":   "4029:1",
+		"name": "Box",
+		"type": "FRAME",
+		"strokes": []any{
+			map[string]any{
+				"type":  "SOLID",
+				"color": map[string]any{"r": 0.0, "g": 0.0, "b": 0.0},
+			},
+		},
+	}
+
+	result, err := Simplify(input, Options{Extractors: AllExtractors})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	node := result.Nodes[0]
+	if node.Strokes == "" {
+		t.Error("expected Strokes ref on node, got empty")
+	}
+	if _, ok := result.GlobalVars.Strokes[node.Strokes]; !ok {
+		t.Errorf("stroke ref %s not found in globalVars.Strokes", node.Strokes)
 	}
 }
 
