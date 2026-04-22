@@ -59,6 +59,11 @@ Install via `npx` — no build step required. Watch the setup video or follow th
 claude mcp add -s project figma-mcp-go -- npx -y @vkhanhqui/figma-mcp-go@latest
 ```
 
+**Codex CLI**
+```bash
+codex mcp add figma-mcp-go -- npx -y @vkhanhqui/figma-mcp-go@latest
+```
+
 **.mcp.json** (Claude and other MCP-compatible tools)
 ```json
 {
