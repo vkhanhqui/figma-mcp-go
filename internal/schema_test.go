@@ -825,6 +825,46 @@ func TestValidateRPC_CreateComponent(t *testing.T) {
 	}
 }
 
+func TestValidateRPC_CreateInstance(t *testing.T) {
+	// missing both componentId and componentKey
+	if msg := ValidateRPC("create_instance", nil, nil); msg == "" {
+		t.Error("expected error when neither componentId nor componentKey provided")
+	}
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{}); msg == "" {
+		t.Error("expected error for empty params")
+	}
+	// both provided — mutually exclusive
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{
+		"componentId": "1:1", "componentKey": "abc",
+	}); msg == "" {
+		t.Error("expected error when both componentId and componentKey provided")
+	}
+	// invalid componentId format
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{"componentId": "bad-id"}); msg == "" {
+		t.Error("expected error for hyphen componentId")
+	}
+	// invalid parentId format
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{
+		"componentId": "1:1", "parentId": "bad",
+	}); msg == "" {
+		t.Error("expected error for invalid parentId")
+	}
+	// valid: componentId only
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{"componentId": "1:1"}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	// valid: componentKey only
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{"componentKey": "abc123"}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	// valid: componentId + parentId
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{
+		"componentId": "1:1", "parentId": "2:2",
+	}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+}
+
 func TestValidateRPC_ExportTokens(t *testing.T) {
 	// no params — valid (defaults to json)
 	if msg := ValidateRPC("export_tokens", nil, nil); msg != "" {
