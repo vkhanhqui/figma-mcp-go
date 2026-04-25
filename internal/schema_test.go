@@ -214,13 +214,31 @@ func TestValidateRPC_SetText(t *testing.T) {
 	if msg := ValidateRPC("set_text", nil, map[string]interface{}{"text": "hello"}); msg == "" {
 		t.Error("expected error for missing nodeId")
 	}
-	// missing text
+	// no text, truncation, or maxLines
 	if msg := ValidateRPC("set_text", []string{"1:1"}, nil); msg == "" {
-		t.Error("expected error for missing text")
+		t.Error("expected error when no text/truncation/maxLines provided")
 	}
-	// valid
-	msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"text": "hello"})
-	if msg != "" {
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{}); msg == "" {
+		t.Error("expected error when no text/truncation/maxLines provided (empty params)")
+	}
+	// invalid textTruncation
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"textTruncation": "TRUNCATE"}); msg == "" {
+		t.Error("expected error for invalid textTruncation")
+	}
+	// valid: text only
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"text": "hello"}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	// valid: textTruncation only
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"textTruncation": "ENDING"}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	// valid: maxLines only
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"maxLines": float64(2)}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	// valid: maxLines = nil (clear)
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"maxLines": nil}); msg != "" {
 		t.Errorf("unexpected error: %s", msg)
 	}
 }

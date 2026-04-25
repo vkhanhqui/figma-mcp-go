@@ -637,6 +637,60 @@ describe("serializeText", () => {
     const result = await serializeText(node, makeBase());
     expect(result.styles.textDecoration).toBe("UNDERLINE");
   });
+
+  it("omits textTruncation when DISABLED and maxLines when null", async () => {
+    const node = {
+      fontName: { family: "Inter", style: "Regular" },
+      fontSize: 14,
+      fontWeight: 400,
+      textDecoration: "NONE",
+      lineHeight: { unit: "AUTO" },
+      letterSpacing: { value: 0, unit: "PIXELS" },
+      textAlignHorizontal: "LEFT",
+      characters: "plain",
+      textTruncation: "DISABLED",
+      maxLines: null,
+    };
+    const result = await serializeText(node, makeBase());
+    expect(result.styles.textTruncation).toBeUndefined();
+    expect(result.styles.maxLines).toBeUndefined();
+  });
+
+  it("includes textTruncation and maxLines when set", async () => {
+    const node = {
+      fontName: { family: "Inter", style: "Regular" },
+      fontSize: 14,
+      fontWeight: 400,
+      textDecoration: "NONE",
+      lineHeight: { unit: "AUTO" },
+      letterSpacing: { value: 0, unit: "PIXELS" },
+      textAlignHorizontal: "LEFT",
+      characters: "truncated content here",
+      textTruncation: "ENDING",
+      maxLines: 2,
+    };
+    const result = await serializeText(node, makeBase());
+    expect(result.styles.textTruncation).toBe("ENDING");
+    expect(result.styles.maxLines).toBe(2);
+  });
+
+  it("emits 'mixed' for mixed textTruncation/maxLines", async () => {
+    const node = {
+      fontName: { family: "Inter", style: "Regular" },
+      fontSize: 14,
+      fontWeight: 400,
+      textDecoration: "NONE",
+      lineHeight: { unit: "AUTO" },
+      letterSpacing: { value: 0, unit: "PIXELS" },
+      textAlignHorizontal: "LEFT",
+      characters: "mixed",
+      textTruncation: Symbol(),
+      maxLines: Symbol(),
+    };
+    const result = await serializeText(node, makeBase());
+    expect(result.styles.textTruncation).toBe("mixed");
+    expect(result.styles.maxLines).toBe("mixed");
+  });
 });
 
 // ── serializeNode ─────────────────────────────────────────────────────────────

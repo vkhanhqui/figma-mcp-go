@@ -167,6 +167,17 @@ export const serializeText = async (node: any, base: any) => {
       ? ((await figma.getStyleByIdAsync(node.textStyleId))?.name ?? undefined)
       : undefined;
 
+  const truncation = isMixed(node.textTruncation)
+    ? "mixed"
+    : node.textTruncation && node.textTruncation !== "DISABLED"
+      ? node.textTruncation
+      : undefined;
+  const maxLines = isMixed(node.maxLines)
+    ? "mixed"
+    : node.maxLines != null
+      ? node.maxLines
+      : undefined;
+
   return Object.assign({}, base, {
     characters: node.characters,
     styles: Object.assign({}, base.styles, {
@@ -185,6 +196,8 @@ export const serializeText = async (node: any, base: any) => {
       textAlignHorizontal: isMixed(node.textAlignHorizontal)
         ? "mixed"
         : node.textAlignHorizontal,
+      ...(truncation !== undefined ? { textTruncation: truncation } : {}),
+      ...(maxLines !== undefined ? { maxLines } : {}),
     }),
   });
 };

@@ -46,6 +46,23 @@ export const handleWriteStyleRequest = async (request: any) => {
       if (p.letterSpacingValue != null) {
         style.letterSpacing = { value: Number(p.letterSpacingValue), unit: p.letterSpacingUnit || "PIXELS" };
       }
+      if (p.textTruncation !== undefined) {
+        if (p.textTruncation !== "DISABLED" && p.textTruncation !== "ENDING") {
+          throw new Error(`textTruncation must be 'DISABLED' or 'ENDING', got: ${p.textTruncation}`);
+        }
+        (style as any).textTruncation = p.textTruncation;
+      }
+      if (p.maxLines !== undefined) {
+        if (p.maxLines !== null) {
+          const n = Number(p.maxLines);
+          if (!Number.isFinite(n) || n < 1) {
+            throw new Error("maxLines must be null or a positive integer");
+          }
+          (style as any).maxLines = n;
+        } else {
+          (style as any).maxLines = null;
+        }
+      }
       figma.commitUndo();
       return {
         type: request.type,

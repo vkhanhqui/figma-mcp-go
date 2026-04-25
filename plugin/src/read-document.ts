@@ -354,13 +354,26 @@ export const handleReadDocumentRequest = async (request: any) => {
       const textNodes: any[] = [];
       const findText = async (n: any) => {
         if (n.type === "TEXT") {
-          textNodes.push({
+          const entry: any = {
             id: n.id,
             name: n.name,
             characters: n.characters,
             fontSize: isMixed(n.fontSize) ? "mixed" : n.fontSize,
             fontName: isMixed(n.fontName) ? "mixed" : n.fontName,
-          });
+          };
+          const trunc = isMixed(n.textTruncation)
+            ? "mixed"
+            : n.textTruncation && n.textTruncation !== "DISABLED"
+              ? n.textTruncation
+              : undefined;
+          if (trunc !== undefined) entry.textTruncation = trunc;
+          const maxLines = isMixed(n.maxLines)
+            ? "mixed"
+            : n.maxLines != null
+              ? n.maxLines
+              : undefined;
+          if (maxLines !== undefined) entry.maxLines = maxLines;
+          textNodes.push(entry);
         }
         if ("children" in n)
           for (const child of n.children) await findText(child);

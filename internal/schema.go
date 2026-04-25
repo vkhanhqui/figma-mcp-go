@@ -280,8 +280,14 @@ func ValidateRPC(tool string, nodeIDs []string, params map[string]interface{}) s
 		if !ValidNodeID(nodeIDs[0]) {
 			return fmt.Sprintf("nodeId must use colon format e.g. 4029:12345, got: %s", nodeIDs[0])
 		}
-		if _, ok := params["text"].(string); !ok {
-			return "text is required"
+		_, hasText := params["text"].(string)
+		_, hasTrunc := params["textTruncation"]
+		_, hasMaxLines := params["maxLines"]
+		if !hasText && !hasTrunc && !hasMaxLines {
+			return "at least one of text, textTruncation, or maxLines is required"
+		}
+		if tt, ok := params["textTruncation"].(string); ok && tt != "DISABLED" && tt != "ENDING" {
+			return fmt.Sprintf("textTruncation must be 'DISABLED' or 'ENDING', got: %s", tt)
 		}
 
 	case "set_fills":

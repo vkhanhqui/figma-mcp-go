@@ -544,3 +544,91 @@ describe("find_replace_text", () => {
     await expect(handleWriteModifyRequest(makeRequest("find_replace_text", [], { find: "x" }))).rejects.toThrow("replace is required");
   });
 });
+
+// ── set_text ──────────────────────────────────────────────────────────────────
+
+describe("set_text", () => {
+  beforeEach(() => {
+    (globalThis as any).figma = {
+      ...(globalThis as any).figma,
+      loadFontAsync: async () => {},
+    };
+  });
+
+  const makeText = (overrides?: any) => ({
+    id: "1:1",
+    name: "Label",
+    type: "TEXT",
+    characters: "old",
+    fontName: { family: "Inter", style: "Regular" },
+    textTruncation: "DISABLED",
+    maxLines: null,
+    ...overrides,
+  });
+
+  it("updates characters when text is provided", async () => {
+    mockNodes["1:1"] = makeText();
+    const res = await handleWriteModifyRequest(makeRequest("set_text", ["1:1"], { text: "new" }));
+    expect(mockNodes["1:1"].characters).toBe("new");
+    expect(res?.data.characters).toBe("new");
+    expect(commitUndoCalled).toBe(true);
+  });
+
+  it("sets textTruncation to ENDING without changing characters", async () => {
+    mockNodes["1:1"] = makeText();
+    const res = await handleWriteModifyRequest(makeRequest("set_text", ["1:1"], { textTruncation: "ENDING" }));
+    expect(mockNodes["1:1"].characters).toBe("old"); // unchanged
+    expect(mockNodes["1:1"].textTruncation).toBe("ENDING");
+    expect(res?.data.textTruncation).toBe("ENDING");
+  });
+
+  it("sets maxLines to a positive integer", async () => {
+    mockNodes["1:1"] = makeText({ textTruncation: "ENDING" });
+    await handleWriteModifyRequest(makeRequest("set_text", ["1:1"], { maxLines: 2 }));
+    expect(mockNodes["1:1"].maxLines).toBe(2);
+  });
+
+  it("clears maxLines when null is passed", async () => {
+    mockNodes["1:1"] = makeText({ maxLines: 5 });
+    await handleWriteModifyRequest(makeRequest("set_text", ["1:1"], { maxLines: null }));
+    expect(mockNodes["1:1"].maxLines).toBeNull();
+  });
+
+  it("rejects invalid textTruncation", async () => {
+    mockNodes["1:1"] = makeText();
+    await expect(
+      handleWriteModifyRequest(makeRequest("set_text", ["1:1"], { textTruncation: "TRUNCATE" })),
+    ).rejects.toThrow("textTruncation must be 'DISABLED' or 'ENDING'");
+  });
+
+  it("rejects non-positive maxLines", async () => {
+    mockNodes["1:1"] = makeText();
+    await expect(
+      handleWriteModifyRequest(makeRequest("set_text", ["1:1"], { maxLines: 0 })),
+    ).rejects.toThrow("maxLines must be null or a positive integer");
+  });
+
+  it("throws if no text/truncation/maxLines provided", async () => {
+    mockNodes["1:1"] = makeText();
+    await expect(
+      handleWriteModifyRequest(makeRequest("set_text", ["1:1"], {})),
+    ).rejects.toThrow("at least one of text, textTruncation, or maxLines is required");
+  });
+
+  it("rejects non-TEXT nodes", async () => {
+    mockNodes["1:1"] = { id: "1:1", type: "FRAME" };
+    await expect(
+      handleWriteModifyRequest(makeRequest("set_text", ["1:1"], { text: "x" })),
+    ).rejects.toThrow("not a TEXT node");
+  });
+
+  it("can update text and truncation in one call", async () => {
+    mockNodes["1:1"] = makeText();
+    await handleWriteModifyRequest(makeRequest("set_text", ["1:1"], {
+      text: "new", textTruncation: "ENDING", maxLines: 3,
+    }));
+    expect(mockNodes["1:1"].characters).toBe("new");
+    expect(mockNodes["1:1"].textTruncation).toBe("ENDING");
+    expect(mockNodes["1:1"].maxLines).toBe(3);
+  });
+});

@@ -73,6 +73,23 @@ export const handleWriteCreateRequest = async (request: any) => {
       textNode.y = p.y != null ? p.y : 0;
       if (p.name) textNode.name = p.name;
       if (p.fillColor) textNode.fills = [makeSolidPaint(p.fillColor)];
+      if (p.textTruncation !== undefined) {
+        if (p.textTruncation !== "DISABLED" && p.textTruncation !== "ENDING") {
+          throw new Error(`textTruncation must be 'DISABLED' or 'ENDING', got: ${p.textTruncation}`);
+        }
+        textNode.textTruncation = p.textTruncation;
+      }
+      if (p.maxLines !== undefined) {
+        if (p.maxLines !== null) {
+          const n = Number(p.maxLines);
+          if (!Number.isFinite(n) || n < 1) {
+            throw new Error("maxLines must be null or a positive integer");
+          }
+          textNode.maxLines = n;
+        } else {
+          textNode.maxLines = null;
+        }
+      }
       (parent as any).appendChild(textNode);
       figma.commitUndo();
       return {

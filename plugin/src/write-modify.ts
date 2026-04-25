@@ -7,19 +7,50 @@ export const handleWriteModifyRequest = async (request: any) => {
       const p = request.params || {};
       const nodeId = request.nodeIds && request.nodeIds[0];
       if (!nodeId) throw new Error("nodeId is required");
-      const node = await figma.getNodeByIdAsync(nodeId);
+      const hasText = typeof p.text === "string";
+      const hasTruncation = p.textTruncation !== undefined;
+      const hasMaxLines = p.maxLines !== undefined;
+      if (!hasText && !hasTruncation && !hasMaxLines) {
+        throw new Error("at least one of text, textTruncation, or maxLines is required");
+      }
+      const node = await figma.getNodeByIdAsync(nodeId) as any;
       if (!node) throw new Error(`Node not found: ${nodeId}`);
       if (node.type !== "TEXT") throw new Error(`Node ${nodeId} is not a TEXT node`);
-      const fontName = typeof node.fontName === "symbol"
-        ? { family: "Inter", style: "Regular" }
-        : node.fontName;
-      await figma.loadFontAsync(fontName);
-      node.characters = p.text;
+      if (hasText) {
+        const fontName = typeof node.fontName === "symbol"
+          ? { family: "Inter", style: "Regular" }
+          : node.fontName;
+        await figma.loadFontAsync(fontName);
+        node.characters = p.text;
+      }
+      if (hasTruncation) {
+        if (p.textTruncation !== "DISABLED" && p.textTruncation !== "ENDING") {
+          throw new Error(`textTruncation must be 'DISABLED' or 'ENDING', got: ${p.textTruncation}`);
+        }
+        node.textTruncation = p.textTruncation;
+      }
+      if (hasMaxLines) {
+        if (p.maxLines !== null) {
+          const n = Number(p.maxLines);
+          if (!Number.isFinite(n) || n < 1) {
+            throw new Error("maxLines must be null or a positive integer");
+          }
+          node.maxLines = n;
+        } else {
+          node.maxLines = null;
+        }
+      }
       figma.commitUndo();
       return {
         type: request.type,
         requestId: request.requestId,
-        data: { id: node.id, name: node.name, characters: node.characters },
+        data: {
+          id: node.id,
+          name: node.name,
+          characters: node.characters,
+          textTruncation: node.textTruncation,
+          maxLines: node.maxLines,
+        },
       };
     }
 

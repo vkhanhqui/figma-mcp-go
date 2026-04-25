@@ -80,6 +80,8 @@ func registerWriteCreateTools(s *server.MCPServer, node *Node) {
 		mcp.WithString("fillColor", mcp.Description("Text color as hex e.g. #000000 (default black)")),
 		mcp.WithString("name", mcp.Description("Node name shown in the layers panel (defaults to the text content)")),
 		mcp.WithString("parentId", mcp.Description("Parent node ID in colon format. Defaults to current page.")),
+		mcp.WithString("textTruncation", mcp.Description("Truncation behaviour: 'DISABLED' (default, no truncation) or 'ENDING' (truncate with an ellipsis)")),
+		mcp.WithNumber("maxLines", mcp.Description("Maximum number of lines before truncation (positive integer). Only applies when textTruncation is 'ENDING'.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		params := req.GetArguments()
 		resp, err := node.Send(ctx, "create_text", nil, params)
