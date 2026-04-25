@@ -3,6 +3,7 @@ import {
   isMixed,
   toHex,
   serializePaints,
+  serializeEffects,
   getBounds,
   deduplicateStyles,
   serializeVariableValue,
@@ -102,6 +103,123 @@ describe("serializePaints", () => {
   });
 });
 
+// ── serializeEffects ──────────────────────────────────────────────────────────
+
+describe("serializeEffects", () => {
+  it("returns 'mixed' for symbol input", () => {
+    expect(serializeEffects(Symbol())).toBe("mixed");
+  });
+
+  it("returns undefined for null/non-array", () => {
+    expect(serializeEffects(null)).toBeUndefined();
+    expect(serializeEffects("nope")).toBeUndefined();
+  });
+
+  it("returns undefined for empty array", () => {
+    expect(serializeEffects([])).toBeUndefined();
+  });
+
+  it("serializes a drop shadow with hex color and split offset", () => {
+    const effects = [
+      {
+        type: "DROP_SHADOW",
+        color: { r: 0, g: 0, b: 0, a: 0.25 },
+        offset: { x: 0, y: 4 },
+        radius: 8,
+        spread: 0,
+        visible: true,
+        blendMode: "NORMAL",
+      },
+    ];
+    expect(serializeEffects(effects)).toEqual([
+      {
+        type: "DROP_SHADOW",
+        color: "#000000",
+        opacity: 0.25,
+        offsetX: 0,
+        offsetY: 4,
+        radius: 8,
+        spread: 0,
+      },
+    ]);
+  });
+
+  it("serializes an inner shadow", () => {
+    const effects = [
+      {
+        type: "INNER_SHADOW",
+        color: { r: 1, g: 1, b: 1, a: 0.5 },
+        offset: { x: -2, y: 2 },
+        radius: 4,
+        spread: 1,
+        visible: true,
+        blendMode: "NORMAL",
+      },
+    ];
+    const result = serializeEffects(effects) as any[];
+    expect(result[0].type).toBe("INNER_SHADOW");
+    expect(result[0].color).toBe("#ffffff");
+    expect(result[0].opacity).toBe(0.5);
+    expect(result[0].offsetX).toBe(-2);
+    expect(result[0].offsetY).toBe(2);
+  });
+
+  it("preserves non-NORMAL blend mode and visible: false", () => {
+    const effects = [
+      {
+        type: "DROP_SHADOW",
+        color: { r: 0, g: 0, b: 0, a: 1 },
+        offset: { x: 0, y: 0 },
+        radius: 0,
+        spread: 0,
+        visible: false,
+        blendMode: "MULTIPLY",
+      },
+    ];
+    const result = serializeEffects(effects) as any[];
+    expect(result[0].blendMode).toBe("MULTIPLY");
+    expect(result[0].visible).toBe(false);
+  });
+
+  it("omits NORMAL blendMode and visible when true", () => {
+    const effects = [
+      {
+        type: "DROP_SHADOW",
+        color: { r: 0, g: 0, b: 0, a: 1 },
+        offset: { x: 0, y: 4 },
+        radius: 4,
+        spread: 0,
+        visible: true,
+        blendMode: "NORMAL",
+      },
+    ];
+    const result = serializeEffects(effects) as any[];
+    expect(result[0].blendMode).toBeUndefined();
+    expect(result[0].visible).toBeUndefined();
+  });
+
+  it("serializes layer blur with just type and radius", () => {
+    const effects = [{ type: "LAYER_BLUR", radius: 12, visible: true }];
+    expect(serializeEffects(effects)).toEqual([{ type: "LAYER_BLUR", radius: 12 }]);
+  });
+
+  it("serializes background blur", () => {
+    const effects = [{ type: "BACKGROUND_BLUR", radius: 20, visible: true }];
+    expect(serializeEffects(effects)).toEqual([{ type: "BACKGROUND_BLUR", radius: 20 }]);
+  });
+
+  it("serializes multiple effects in order", () => {
+    const effects = [
+      { type: "DROP_SHADOW", color: { r: 0, g: 0, b: 0, a: 0.1 }, offset: { x: 0, y: 1 }, radius: 2, spread: 0, visible: true, blendMode: "NORMAL" },
+      { type: "DROP_SHADOW", color: { r: 0, g: 0, b: 0, a: 0.2 }, offset: { x: 0, y: 4 }, radius: 8, spread: 0, visible: true, blendMode: "NORMAL" },
+    ];
+    const result = serializeEffects(effects) as any[];
+    expect(result).toHaveLength(2);
+    expect(result[0].opacity).toBe(0.1);
+    expect(result[1].opacity).toBe(0.2);
+  });
+});
+
 // ── getBounds ─────────────────────────────────────────────────────────────────
 
 describe("getBounds", () => {
@@ -190,6 +308,22 @@ describe("deduplicateStyles", () => {
     const children = (result as any).children;
     expect(typeof children[0].styles.fills).toBe("string");
     expect(children[0].styles.fills).toBe(children[1].styles.fills);
+  });
+
+  it("deduplicates effects that appear more than once", () => {
+    const sharedEffect = [{ type: "DROP_SHADOW", color: "#000000", opacity: 0.1, offsetX: 0, offsetY: 4, radius: 8, spread: 0 }];
+    const tree = {
+      children: [
+        { styles: { effects: sharedEffect } },
+        { styles: { effects: sharedEffect } },
+      ],
+    };
+    const { tree: result, globalVars } = deduplicateStyles(tree);
+    expect(globalVars).toBeDefined();
+    expect(Object.keys(globalVars!.styles).length).toBe(1);
+    const children = (result as any).children;
+    expect(typeof children[0].styles.effects).toBe("string");
+    expect(children[0].styles.effects).toBe(children[1].styles.effects);
   });
 
   it("deduplicates strokes that appear more than once", () => {
@@ -330,6 +464,58 @@ describe("serializeStyles", () => {
     const node = { paddingLeft: 10, paddingRight: 20, paddingTop: 5, paddingBottom: 15 };
     const result = await serializeStyles(node);
     expect(result.padding).toEqual({ top: 5, right: 20, bottom: 15, left: 10 });
+  });
+
+  it("includes effects when node has a drop shadow", async () => {
+    const node = {
+      effects: [
+        {
+          type: "DROP_SHADOW",
+          color: { r: 0, g: 0, b: 0, a: 0.1 },
+          offset: { x: 0, y: 4 },
+          radius: 8,
+          spread: 0,
+          visible: true,
+          blendMode: "NORMAL",
+        },
+      ],
+    };
+    const result = await serializeStyles(node);
+    expect(result.effects).toEqual([
+      {
+        type: "DROP_SHADOW",
+        color: "#000000",
+        opacity: 0.1,
+        offsetX: 0,
+        offsetY: 4,
+        radius: 8,
+        spread: 0,
+      },
+    ]);
+  });
+
+  it("includes effectStyle name when effectStyleId resolves", async () => {
+    mockGetStyleByIdAsync = async (id) => (id === "es-1" ? { name: "Elevation/Card" } : null);
+    const node = {
+      effects: [
+        { type: "LAYER_BLUR", radius: 4, visible: true },
+      ],
+      effectStyleId: "es-1",
+    };
+    const result = await serializeStyles(node);
+    expect(result.effectStyle).toBe("Elevation/Card");
+    expect(result.effects).toEqual([{ type: "LAYER_BLUR", radius: 4 }]);
+  });
+
+  it("omits effects when node has the property but the array is empty", async () => {
+    const result = await serializeStyles({ effects: [] });
+    expect(result.effects).toBeUndefined();
+    expect(result.effectStyle).toBeUndefined();
+  });
+
+  it("does not include effects when node lacks the property", async () => {
+    const result = await serializeStyles({ name: "no-effects" });
+    expect(result.effects).toBeUndefined();
   });
 });
 

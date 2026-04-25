@@ -12,6 +12,45 @@ export const toHex = (color: any) => {
   return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 };
 
+// serializeEffects converts a Figma Effect[] into a JSON-friendly shape that
+// mirrors the input shape accepted by the `set_effects` write tool — colors
+// as hex, alpha as `opacity`, offset split into offsetX/offsetY.
+export const serializeEffects = (effects: any) => {
+  if (isMixed(effects)) return "mixed";
+  if (!effects || !Array.isArray(effects)) return undefined;
+
+  const result = effects.map((e: any) => {
+    if (e.type === "DROP_SHADOW" || e.type === "INNER_SHADOW") {
+      const out: any = {
+        type: e.type,
+        color: e.color ? toHex(e.color) : undefined,
+        opacity: e.color && "a" in e.color ? e.color.a : undefined,
+        offsetX: e.offset ? e.offset.x : undefined,
+        offsetY: e.offset ? e.offset.y : undefined,
+        radius: e.radius,
+        spread: e.spread,
+        blendMode: e.blendMode && e.blendMode !== "NORMAL" ? e.blendMode : undefined,
+        visible: e.visible === false ? false : undefined,
+      };
+      // Strip undefined keys for compactness
+      for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+      return out;
+    }
+    if (e.type === "LAYER_BLUR" || e.type === "BACKGROUND_BLUR") {
+      const out: any = {
+        type: e.type,
+        radius: e.radius,
+        visible: e.visible === false ? false : undefined,
+      };
+      for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+      return out;
+    }
+    return e;
+  });
+
+  return result.length > 0 ? result : undefined;
+};
+
 export const serializePaints = (paints: any) => {
   if (isMixed(paints)) return "mixed";
 
@@ -67,6 +106,15 @@ export const serializeStyles = async (node: any) => {
     }
     const strokes = serializePaints(node.strokes);
     if (strokes !== undefined) styles.strokes = strokes;
+  }
+
+  if ("effects" in node) {
+    if (node.effectStyleId && typeof node.effectStyleId === "string") {
+      const style = await figma.getStyleByIdAsync(node.effectStyleId);
+      if (style) styles.effectStyle = style.name;
+    }
+    const effects = serializeEffects(node.effects);
+    if (effects !== undefined) styles.effects = effects;
   }
 
   if ("cornerRadius" in node) {
@@ -172,6 +220,7 @@ export const deduplicateStyles = (tree: any): { tree: any; globalVars: Record<st
     if (s) {
       if (Array.isArray(s.fills)) counts.set(JSON.stringify(s.fills), (counts.get(JSON.stringify(s.fills)) ?? 0) + 1);
       if (Array.isArray(s.strokes)) counts.set(JSON.stringify(s.strokes), (counts.get(JSON.stringify(s.strokes)) ?? 0) + 1);
+      if (Array.isArray(s.effects)) counts.set(JSON.stringify(s.effects), (counts.get(JSON.stringify(s.effects)) ?? 0) + 1);
     }
     if (Array.isArray(node.children)) node.children.forEach(countWalk);
   };
@@ -204,6 +253,10 @@ export const deduplicateStyles = (tree: any): { tree: any; globalVars: Record<st
       if (Array.isArray(s.strokes)) {
         const ref = keyToRef.get(JSON.stringify(s.strokes));
         if (ref) newStyles = { ...newStyles, strokes: ref };
+      }
+      if (Array.isArray(s.effects)) {
+        const ref = keyToRef.get(JSON.stringify(s.effects));
+        if (ref) newStyles = { ...newStyles, effects: ref };
       }
       if (newStyles !== s) result = { ...node, styles: newStyles };
     }
