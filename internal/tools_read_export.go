@@ -56,6 +56,7 @@ func registerReadExportTools(s *server.MCPServer, node *Node) {
 			mcp.Description("File path to write the PDF to, must end in .pdf (relative to working directory or absolute)"),
 		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		defer startAutoProgress(ctx, req, "export_frames_to_pdf")()
 		raw, _ := req.GetArguments()["nodeIds"].([]interface{})
 		nodeIDs := toStringSlice(raw)
 		outputPath, _ := req.GetArguments()["outputPath"].(string)
@@ -142,8 +143,9 @@ func executeExportFramesToPDF(ctx context.Context, node *Node, nodeIDs []string,
 	return mcp.NewToolResultText(string(out)), nil
 }
 
-// extractFramePDFs parses the plugin response `{frames:[{base64:...},...]}` and
-// returns raw PDF bytes for each frame.
+// extractFramePDFs parses the plugin response and returns raw PDF bytes per
+// frame. Binary-frame plugins put bytes in `bytes` (decoded from base64 by
+// json.Unmarshal); legacy plugins use `base64` and we decode manually.
 func extractFramePDFs(data interface{}) ([][]byte, error) {
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -151,7 +153,8 @@ func extractFramePDFs(data interface{}) ([][]byte, error) {
 	}
 	var wrapper struct {
 		Frames []struct {
-			Base64 string `json:"base64"`
+			Bytes  []byte `json:"bytes,omitempty"`
+			Base64 string `json:"base64,omitempty"`
 		} `json:"frames"`
 	}
 	if err := json.Unmarshal(b, &wrapper); err != nil {
@@ -162,8 +165,12 @@ func extractFramePDFs(data interface{}) ([][]byte, error) {
 	}
 	pages := make([][]byte, 0, len(wrapper.Frames))
 	for i, f := range wrapper.Frames {
+		if len(f.Bytes) > 0 {
+			pages = append(pages, f.Bytes)
+			continue
+		}
 		if f.Base64 == "" {
-			return nil, fmt.Errorf("frame %d has empty base64", i)
+			return nil, fmt.Errorf("frame %d has empty payload", i)
 		}
 		raw, err := base64.StdEncoding.DecodeString(f.Base64)
 		if err != nil {

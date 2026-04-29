@@ -375,14 +375,47 @@ func ValidateRPC(tool string, nodeIDs []string, params map[string]interface{}) s
 		}
 
 	case "import_image":
+		// Tool handlers resolve imagePath/imageUrl into imageData before this
+		// runs; bridge cache pre-flight may drop imageData in favour of
+		// imageHash. Either is fine here — we only reject the hopeless case
+		// where neither is set.
 		if imageData, _ := params["imageData"].(string); imageData == "" {
-			return "imageData (base64) is required"
+			if imageHash, _ := params["imageHash"].(string); imageHash == "" {
+				return "imageData (base64) or imageHash is required"
+			}
 		}
 		if sm, ok := params["scaleMode"].(string); ok && sm != "" {
 			switch sm {
 			case "FILL", "FIT", "CROP", "TILE":
 			default:
 				return fmt.Sprintf("scaleMode must be FILL, FIT, CROP, or TILE, got: %s", sm)
+			}
+		}
+		if pid, ok := params["parentId"].(string); ok && pid != "" && !ValidNodeID(pid) {
+			return fmt.Sprintf("parentId must use colon format e.g. 4029:12345, got: %s", pid)
+		}
+
+	case "import_images":
+		items, ok := params["items"].([]interface{})
+		if !ok || len(items) == 0 {
+			return "items must be a non-empty array"
+		}
+		for i, raw := range items {
+			m, ok := raw.(map[string]interface{})
+			if !ok {
+				return fmt.Sprintf("items[%d] must be an object", i)
+			}
+			imageData, _ := m["imageData"].(string)
+			imageHash, _ := m["imageHash"].(string)
+			if imageData == "" && imageHash == "" {
+				return fmt.Sprintf("items[%d] requires imageData or imageHash", i)
+			}
+			if sm, ok := m["scaleMode"].(string); ok && sm != "" {
+				switch sm {
+				case "FILL", "FIT", "CROP", "TILE":
+				default:
+					return fmt.Sprintf("items[%d].scaleMode must be FILL, FIT, CROP, or TILE, got: %s", i, sm)
+				}
 			}
 		}
 		if pid, ok := params["parentId"].(string); ok && pid != "" && !ValidNodeID(pid) {

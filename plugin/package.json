@@ -10,9 +10,7 @@
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1",
-    "@sveltejs/vite-plugin-svelte": "^5",
     "concurrently": "^9",
-    "svelte": "^5",
     "typescript": "^5",
     "vite": "^6",
     "vite-plugin-singlefile": "^2"

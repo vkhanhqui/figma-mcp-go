@@ -62,6 +62,7 @@ func registerReadDocumentTools(s *server.MCPServer, node *Node) {
 			mcp.Description("When true, INSTANCE nodes are serialized compactly (mainComponentId + componentProperties + overrides array of differing text/nested content) and unique component definitions are collected once in a top-level componentDefs map. Highly token-efficient for screens with many repeated component instances."),
 		),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		defer startAutoProgress(ctx, req, "get_design_context")()
 		params := map[string]interface{}{}
 		if d, ok := req.GetArguments()["depth"].(float64); ok && d > 0 {
 			params["depth"] = d

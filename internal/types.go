@@ -17,6 +17,11 @@ type BridgeResponse struct {
 	// Progress fields — sent mid-operation for long-running commands
 	Progress int    `json:"progress,omitempty"`
 	Message  string `json:"message,omitempty"`
+	// Hello fields — sent once by the plugin after ws.onopen so the server
+	// can record the plugin version + advertised capabilities. Backwards
+	// compatible: missing fields are treated as "legacy plugin".
+	PluginVersion string   `json:"pluginVersion,omitempty"`
+	Capabilities  []string `json:"capabilities,omitempty"`
 }
 
 // RPCRequest is the wire format for follower → leader /rpc calls.

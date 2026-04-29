@@ -41,12 +41,16 @@ export const handleReadExportRequest = async (request: any) => {
                       constraint: { type: "SCALE", value: scale },
                     };
           const bytes = await node.exportAsync(settings);
-          const base64 = figma.base64Encode(bytes);
+          // Hand raw Uint8Array up to the dispatcher; main.ts encodes a
+          // binary frame so we skip the figma.base64Encode hot path on
+          // multi-MB screenshots. Server-side decodeImageBytes accepts
+          // either binary `bytes` or legacy `base64` so older clients keep
+          // working.
           return {
             nodeId: node.id,
             nodeName: node.name,
             format,
-            base64,
+            bytes,
             width: node.width,
             height: node.height,
           };
@@ -56,6 +60,57 @@ export const handleReadExportRequest = async (request: any) => {
         type: request.type,
         requestId: request.requestId,
         data: { exports },
+      };
+    }
+
+    case "export_nodes_batch": {
+      // Per-item export settings. Used by save_screenshots so the Go side
+      // gets one round-trip for the whole batch instead of N. Errors are
+      // returned per-item rather than thrown so partial success is preserved.
+      const items: any[] = Array.isArray(request.params?.items) ? request.params.items : [];
+      const defaultFormat: string = request.params?.format || "PNG";
+      const defaultScale: number = request.params?.scale != null ? Number(request.params.scale) : 2;
+
+      const results = await Promise.all(items.map(async (item: any) => {
+        const idx = item?.index ?? -1;
+        const nodeId: string = item?.nodeId;
+        const format: string = (item?.format || defaultFormat).toUpperCase();
+        const scale: number = item?.scale != null ? Number(item.scale) : defaultScale;
+        try {
+          if (!nodeId) throw new Error("nodeId is required");
+          const node: any = await figma.getNodeByIdAsync(nodeId);
+          if (!node) throw new Error(`Node ${nodeId} not found`);
+          if (node.type === "DOCUMENT" || node.type === "PAGE") throw new Error(`Node ${nodeId} (${node.type}) is not exportable`);
+          const settings: any = format === "SVG"
+            ? { format: "SVG" }
+            : format === "PDF"
+              ? { format: "PDF" }
+              : { format, constraint: { type: "SCALE", value: scale } };
+          const bytes = await node.exportAsync(settings);
+          return {
+            index: idx,
+            success: true,
+            nodeId: node.id,
+            nodeName: node.name,
+            format,
+            bytes,
+            width: node.width,
+            height: node.height,
+          };
+        } catch (err) {
+          return {
+            index: idx,
+            success: false,
+            nodeId,
+            error: (err as Error).message || String(err),
+          };
+        }
+      }));
+
+      return {
+        type: request.type,
+        requestId: request.requestId,
+        data: { results },
       };
     }
 
@@ -71,11 +126,10 @@ export const handleReadExportRequest = async (request: any) => {
           throw new Error(`Node ${id} not found or is not exportable`);
         }
         const bytes = await (node as any).exportAsync({ format: "PDF" });
-        const base64 = figma.base64Encode(bytes);
         frames.push({
           nodeId: node.id,
           nodeName: node.name,
-          base64,
+          bytes,
         });
       }
       return {

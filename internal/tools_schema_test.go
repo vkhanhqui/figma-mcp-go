@@ -106,7 +106,7 @@ func TestToolSchemas_ArrayItemsHaveType(t *testing.T) {
 // accidentally dropped registrations are caught.
 func TestToolSchemas_AllToolsRegistered(t *testing.T) {
 	resp := listTools(t)
-	const want = 73
+	const want = 74
 	got := len(resp.Result.Tools)
 	if got != want {
 		t.Errorf("expected %d registered tools, got %d — update the constant if tools were intentionally added or removed", want, got)

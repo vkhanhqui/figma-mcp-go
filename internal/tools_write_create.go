@@ -87,11 +87,10 @@ func registerWriteCreateTools(s *server.MCPServer, node *Node) {
 	})
 
 	s.AddTool(mcp.NewTool("import_image",
-		mcp.WithDescription("Import a base64-encoded image into Figma as a rectangle with an image fill. Use get_screenshot to capture images or provide your own base64 PNG/JPG."),
-		mcp.WithString("imageData",
-			mcp.Required(),
-			mcp.Description("Base64-encoded image data (PNG or JPG)"),
-		),
+		mcp.WithDescription("Import an image into Figma as a rectangle with an image fill. Provide exactly one of imageData (base64 PNG/JPG), imagePath (local file), or imageUrl (http/https). Repeated imports of the same bytes hit a content-addressed cache and skip the wire payload."),
+		mcp.WithString("imageData", mcp.Description("Base64-encoded image data (PNG or JPG). Mutually exclusive with imagePath and imageUrl.")),
+		mcp.WithString("imagePath", mcp.Description("Absolute path to a local image file. Server reads + hashes; preferred over imageData for files on disk.")),
+		mcp.WithString("imageUrl", mcp.Description("HTTP or HTTPS URL of an image. Server fetches it (10s timeout, 50MB max, image/* content-type required).")),
 		mcp.WithNumber("x", mcp.Description("X position (default 0)")),
 		mcp.WithNumber("y", mcp.Description("Y position (default 0)")),
 		mcp.WithNumber("width", mcp.Description("Width in pixels (default 200)")),
@@ -100,32 +99,50 @@ func registerWriteCreateTools(s *server.MCPServer, node *Node) {
 		mcp.WithString("scaleMode", mcp.Description("Image scale mode: FILL (default), FIT, CROP, or TILE")),
 		mcp.WithString("parentId", mcp.Description("Parent node ID in colon format. Defaults to current page.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		defer startAutoProgress(ctx, req, "import_image")()
+		args := req.GetArguments()
+		resolved, err := ResolveImage(ctx, args)
+		if err != nil {
+			return renderResponse(BridgeResponse{}, err)
+		}
 		params := map[string]interface{}{
-			"imageData": req.GetArguments()["imageData"],
+			"imageData":   resolved.Base64Data(),
+			"contentHash": resolved.ContentHash,
 		}
-		if x, ok := req.GetArguments()["x"].(float64); ok {
-			params["x"] = x
-		}
-		if y, ok := req.GetArguments()["y"].(float64); ok {
-			params["y"] = y
-		}
-		if w, ok := req.GetArguments()["width"].(float64); ok {
-			params["width"] = w
-		}
-		if h, ok := req.GetArguments()["height"].(float64); ok {
-			params["height"] = h
-		}
-		if n, ok := req.GetArguments()["name"].(string); ok && n != "" {
-			params["name"] = n
-		}
-		if sm, ok := req.GetArguments()["scaleMode"].(string); ok && sm != "" {
-			params["scaleMode"] = sm
-		}
-		if pid, ok := req.GetArguments()["parentId"].(string); ok && pid != "" {
-			params["parentId"] = pid
-		}
+		CopyFloat(params, args, "x")
+		CopyFloat(params, args, "y")
+		CopyFloat(params, args, "width")
+		CopyFloat(params, args, "height")
+		CopyString(params, args, "name")
+		CopyString(params, args, "scaleMode")
+		CopyString(params, args, "parentId")
 		resp, err := node.Send(ctx, "import_image", nil, params)
 		return renderResponse(resp, err)
+	})
+
+	s.AddTool(mcp.NewTool("import_images",
+		mcp.WithDescription("Batch import many images in a single round-trip. Each item provides exactly one of imageData (base64), imagePath (local file), or imageUrl (http/https). Items hit the same per-session imageHash cache as import_image; repeats skip the wire payload and the figma.createImage call entirely. Per-item errors are reported in `results` rather than failing the whole batch."),
+		mcp.WithArray("items",
+			mcp.Required(),
+			mcp.Description("List of image items to import."),
+			mcp.Items(map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"imageData": map[string]any{"type": "string", "description": "Base64-encoded image (PNG/JPG)."},
+					"imagePath": map[string]any{"type": "string", "description": "Absolute path to a local image file."},
+					"imageUrl":  map[string]any{"type": "string", "description": "HTTP/HTTPS URL of an image."},
+					"x":         map[string]any{"type": "number", "description": "X position (default 0)."},
+					"y":         map[string]any{"type": "number", "description": "Y position (default 0)."},
+					"width":     map[string]any{"type": "number", "description": "Width in pixels (default 200)."},
+					"height":    map[string]any{"type": "number", "description": "Height in pixels (default 200)."},
+					"name":      map[string]any{"type": "string", "description": "Node name."},
+					"scaleMode": map[string]any{"type": "string", "description": "FILL (default), FIT, CROP, or TILE."},
+				},
+			}),
+		),
+		mcp.WithString("parentId", mcp.Description("Parent node ID for all items. Defaults to current page.")),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return executeImportImages(ctx, node, req)
 	})
 
 	s.AddTool(mcp.NewTool("create_component",
@@ -154,22 +171,13 @@ func registerWriteCreateTools(s *server.MCPServer, node *Node) {
 		mcp.WithNumber("width", mcp.Description("Width in pixels")),
 		mcp.WithNumber("height", mcp.Description("Height in pixels")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		args := req.GetArguments()
 		params := map[string]interface{}{}
-		if name, ok := req.GetArguments()["name"].(string); ok && name != "" {
-			params["name"] = name
-		}
-		if x, ok := req.GetArguments()["x"].(float64); ok {
-			params["x"] = x
-		}
-		if y, ok := req.GetArguments()["y"].(float64); ok {
-			params["y"] = y
-		}
-		if w, ok := req.GetArguments()["width"].(float64); ok {
-			params["width"] = w
-		}
-		if h, ok := req.GetArguments()["height"].(float64); ok {
-			params["height"] = h
-		}
+		CopyString(params, args, "name")
+		CopyFloat(params, args, "x")
+		CopyFloat(params, args, "y")
+		CopyFloat(params, args, "width")
+		CopyFloat(params, args, "height")
 		resp, err := node.Send(ctx, "create_section", nil, params)
 		return renderResponse(resp, err)
 	})

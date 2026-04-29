@@ -10,9 +10,18 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/vkhanhqui/figma-mcp-go/internal/observability"
 )
 
 var followerLogger = log.New(os.Stderr, "[follower] ", 0)
+
+// followerHTTPSlack is the buffer added to the per-tool bridge timeout when
+// calculating the follower's HTTP timeout. The leader needs to time out first
+// so its error message reaches the follower; without slack the HTTP layer
+// would race the bridge and the follower would surface a less informative
+// "Client.Timeout exceeded" instead.
+const followerHTTPSlack = 10 * time.Second
 
 // Follower proxies MCP tool calls to the leader via HTTP /rpc.
 type Follower struct {
@@ -25,15 +34,29 @@ func NewFollower(leaderURL string) *Follower {
 	return &Follower{
 		leaderURL: leaderURL,
 		client: &http.Client{
-			// 35s > 30s bridge timeout — gives the leader time to time out first
-			Timeout: 35 * time.Second,
+			// Per-call timeout is set on each request via context. The client
+			// itself only enforces the outer connection-level guarantees.
+			Transport: &http.Transport{
+				MaxIdleConnsPerHost:   4,
+				IdleConnTimeout:       90 * time.Second,
+				DisableCompression:    false,
+				ResponseHeaderTimeout: 10 * time.Second,
+			},
 		},
 	}
 }
 
 // Send proxies a tool call to the leader.
 func (f *Follower) Send(ctx context.Context, tool string, nodeIDs []string, params map[string]interface{}) (BridgeResponse, error) {
-	followerLogger.Printf("proxy %s nodeIDs=%v params=%v → %s/rpc", tool, nodeIDs, params, f.leaderURL)
+	slog := observability.Component("follower")
+	followerLogger.Printf("proxy %s nodeIDs=%v paramKeys=%v → %s/rpc", tool, nodeIDs, paramKeysOf(params), f.leaderURL)
+	slog.Debug("proxy_start",
+		"tool", tool,
+		"node_ids", nodeIDs,
+		"param_keys", paramKeysOf(params),
+		"leader_url", f.leaderURL,
+		"role", "follower",
+	)
 	start := time.Now()
 
 	rpcReq := RPCRequest{
@@ -47,7 +70,19 @@ func (f *Follower) Send(ctx context.Context, tool string, nodeIDs []string, para
 		return BridgeResponse{}, fmt.Errorf("marshal: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.leaderURL+"/rpc", bytes.NewReader(body))
+	// Adaptive timeout: track the bridge's timeout for this tool + payload
+	// size, plus slack for the leader to time out first and respond cleanly.
+	paramsLen := 0
+	if d, ok := params["imageData"].(string); ok {
+		paramsLen = len(d)
+	}
+	bridgeTimeout := timeoutFor(tool, paramsLen)
+	httpTimeout := bridgeTimeout + followerHTTPSlack
+
+	reqCtx, cancel := context.WithTimeout(ctx, httpTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, f.leaderURL+"/rpc", bytes.NewReader(body))
 	if err != nil {
 		return BridgeResponse{}, fmt.Errorf("new request: %w", err)
 	}
@@ -70,12 +105,29 @@ func (f *Follower) Send(ctx context.Context, tool string, nodeIDs []string, para
 		return BridgeResponse{}, fmt.Errorf("unmarshal: %w", err)
 	}
 
+	dur := time.Since(start)
+	observability.RequestDurationSeconds.WithLabelValues(tool, "follower").Observe(dur.Seconds())
 	if rpcResp.Error != "" {
-		followerLogger.Printf("proxy %s error from leader in %dms: %s", tool, time.Since(start).Milliseconds(), rpcResp.Error)
+		observability.RequestsTotal.WithLabelValues(tool, "plugin_error", "follower").Inc()
+		followerLogger.Printf("proxy %s error from leader in %dms: %s", tool, dur.Milliseconds(), rpcResp.Error)
+		slog.Warn("proxy_complete",
+			"tool", tool,
+			"latency_ms", dur.Milliseconds(),
+			"plugin_error", true,
+			"role", "follower",
+		)
 		return BridgeResponse{Error: rpcResp.Error}, nil
 	}
 
-	followerLogger.Printf("proxy %s ok in %dms", tool, time.Since(start).Milliseconds())
+	observability.RequestsTotal.WithLabelValues(tool, "ok", "follower").Inc()
+	followerLogger.Printf("proxy %s ok in %dms", tool, dur.Milliseconds())
+	slog.Info("proxy_complete",
+		"tool", tool,
+		"latency_ms", dur.Milliseconds(),
+		"bytes_out", len(respBody),
+		"plugin_error", false,
+		"role", "follower",
+	)
 	return BridgeResponse{
 		Type: tool,
 		Data: rpcResp.Data,

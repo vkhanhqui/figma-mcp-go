@@ -3,8 +3,203 @@
   <head>
     <meta charset="utf-8" />
     <title>figma-mcp-go</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 12px;
+        background: #1e1e1e;
+        color: #e0e0e0;
+        height: 100vh;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        padding: 16px;
+        gap: 12px;
+      }
+      .info-section { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+      .info-row { display: flex; justify-content: space-between; align-items: center; }
+      .info-label { color: #888; }
+      .info-value {
+        color: #e0e0e0;
+        font-weight: 500;
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .working-banner {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        background: #1a2e3a;
+        border: 1px solid #2563eb44;
+        border-radius: 8px;
+        color: #60a5fa;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .working-banner.visible { display: flex; }
+      .spinner {
+        width: 10px;
+        height: 10px;
+        border: 2px solid #60a5fa44;
+        border-top-color: #60a5fa;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        flex-shrink: 0;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .footer { display: flex; flex-direction: column; gap: 8px; }
+      .footer-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .links { display: flex; align-items: center; gap: 10px; }
+      .footer-link {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        text-decoration: none;
+        color: #888;
+        font-size: 11px;
+      }
+      .footer-link:hover { color: #e0e0e0; }
+      .author {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        text-decoration: none;
+        color: #888;
+        font-size: 11px;
+      }
+      .author:hover { color: #e0e0e0; }
+      .author img { width: 20px; height: 20px; border-radius: 50%; }
+      .server-addr {
+        background: none;
+        border: none;
+        color: #666;
+        font-size: 10px;
+        font-family: monospace;
+        cursor: pointer;
+        padding: 2px 4px;
+        border-radius: 4px;
+      }
+      .server-addr:hover { color: #aaa; background: #2a2a2a; }
+      .settings-panel {
+        display: none;
+        align-items: center;
+        gap: 6px;
+        flex: 1;
+      }
+      .settings-panel.visible { display: flex; }
+      .addr-input,
+      .port-input {
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #e0e0e0;
+        font-size: 10px;
+        font-family: monospace;
+        padding: 2px 4px;
+        outline: none;
+      }
+      .addr-input { width: 72px; }
+      .port-input { width: 36px; }
+      .addr-input:focus, .port-input:focus { border-color: #555; }
+      .addr-sep { color: #666; font-size: 10px; }
+      .apply-btn, .cancel-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 11px;
+        padding: 1px 3px;
+        border-radius: 3px;
+      }
+      .apply-btn { color: #4ade80; }
+      .apply-btn:hover { background: #1a3a2a; }
+      .cancel-btn { color: #f87171; }
+      .cancel-btn:hover { background: #3a1a1a; }
+      .badge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .badge.connected { background: #1a472a; color: #4ade80; }
+      .badge.disconnected { background: #3a1a1a; color: #f87171; }
+      .dot { width: 6px; height: 6px; border-radius: 50%; background: #f87171; }
+      .dot.connected { background: #4ade80; }
+    </style>
   </head>
   <body>
+    <div class="container">
+      <div class="info-section">
+        <div class="info-row">
+          <span class="info-label">File</span>
+          <span class="info-value" id="file-name" title="—">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Page</span>
+          <span class="info-value" id="page-name" title="—">—</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Selection</span>
+          <span class="info-value" id="selection-count">0 node(s)</span>
+        </div>
+      </div>
+      <div class="working-banner" id="working-banner">
+        <span class="spinner"></span>
+        <span>AI is working…</span>
+      </div>
+      <div class="footer">
+        <div class="footer-row">
+          <button class="server-addr" id="server-addr" title="Click to configure server address">
+            127.0.0.1:1994
+          </button>
+          <div class="settings-panel" id="settings-panel">
+            <input class="addr-input" id="addr-input" placeholder="127.0.0.1" />
+            <span class="addr-sep">:</span>
+            <input class="port-input" id="port-input" placeholder="1994" />
+            <button class="apply-btn" id="apply-btn" title="Apply">✓</button>
+            <button class="cancel-btn" id="cancel-btn" title="Cancel">✕</button>
+          </div>
+          <div class="badge disconnected" id="connection-badge">
+            <span class="dot"></span>
+            <span id="connection-text">Disconnected</span>
+          </div>
+        </div>
+        <div class="footer-row">
+          <a class="author" href="https://github.com/vkhanhqui/figma-mcp-go" target="_blank">
+            <img src="https://avatars.githubusercontent.com/u/64468109?v=4" alt="avatar" />
+            vkhanhqui
+          </a>
+          <div class="links">
+            <a class="footer-link"
+               href="https://github.com/vkhanhqui/figma-mcp-go/issues/new?labels=bug"
+               target="_blank" title="Report a bug">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm7-3.25v2.992l2.028.812.772-1.932-2.8-1.872ZM6.272 3.937 3.5 5.808l.772 1.932L6.3 6.928V3.873a.75.75 0 0 0-.028.064ZM8.75 9.75H7.25V11h1.5V9.75Zm0-5.5H7.25v4h1.5v-4Z"/></svg>
+              Bug
+            </a>
+            <a class="footer-link"
+               href="https://github.com/vkhanhqui/figma-mcp-go/issues/new?labels=enhancement&title=Feature+request%3A+"
+               target="_blank" title="Suggest a feature">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 14.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"/></svg>
+              Suggest
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

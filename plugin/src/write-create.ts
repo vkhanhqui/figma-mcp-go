@@ -1,6 +1,85 @@
 import { getBounds } from "./serializers";
 import { makeSolidPaint, getParentNode, base64ToBytes, applyAutoLayout } from "./write-helpers";
 
+// Module-level cache: content SHA-256 (hex) → Figma imageHash.
+// Cleared when plugin reloads. Reuse skips both decode + figma.createImage
+// when the same bytes are imported again in this session.
+const imageHashCache = new Map<string, string>();
+
+const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
+  const subtle = (globalThis as any).crypto?.subtle;
+  if (subtle && typeof subtle.digest === "function") {
+    const buf = await subtle.digest("SHA-256", bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    const view = new Uint8Array(buf);
+    let hex = "";
+    for (let i = 0; i < view.length; i++) hex += view[i].toString(16).padStart(2, "0");
+    return hex;
+  }
+  // FNV-1a 64-bit fallback — collision-safe enough for in-session dedupe.
+  let h1 = 0x811c9dc5, h2 = 0xcbf29ce4;
+  for (let i = 0; i < bytes.length; i++) {
+    h1 ^= bytes[i]; h1 = (h1 * 0x01000193) >>> 0;
+    h2 ^= bytes[i]; h2 = (h2 * 0x100000001b3) >>> 0;
+  }
+  return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0") + bytes.length.toString(16);
+};
+
+const getOrCreateImageHash = async (bytes: Uint8Array): Promise<{ imageHash: string; cached: boolean; contentHash: string }> => {
+  const contentHash = await sha256Hex(bytes);
+  const cached = imageHashCache.get(contentHash);
+  if (cached) return { imageHash: cached, cached: true, contentHash };
+  const image = figma.createImage(bytes);
+  imageHashCache.set(contentHash, image.hash);
+  return { imageHash: image.hash, cached: false, contentHash };
+};
+
+interface ImageRectResult {
+  id: string;
+  name: string;
+  type: string;
+  bounds: any;
+  imageHash: string;
+  contentHash?: string;
+  cached: boolean;
+}
+
+// createImageRect resolves an image (server-side cache hit ⇒ bytes are absent
+// and imageHash is provided directly; otherwise decode + createImage with our
+// own per-session content cache) and attaches it as an IMAGE fill to a new
+// rectangle. Shared by single-import and batch-import handlers so the fast
+// path stays consistent.
+const createImageRect = async (p: any, parent: any): Promise<ImageRectResult> => {
+  let imageHash: string | undefined = p.imageHash;
+  let cached = !!imageHash;
+  let contentHash: string | undefined = p.contentHash;
+
+  if (!imageHash) {
+    if (!p.imageData) throw new Error("imageData (base64) or imageHash is required");
+    // Binary frames place a Uint8Array here directly so we skip the base64
+    // decode hot path on large icons. Text frames still arrive as base64
+    // strings.
+    const bytes =
+      p.imageData instanceof Uint8Array ? p.imageData : base64ToBytes(p.imageData);
+    const result = await getOrCreateImageHash(bytes);
+    imageHash = result.imageHash;
+    cached = result.cached;
+    contentHash = result.contentHash;
+  } else if (contentHash) {
+    // Server cache hit — mirror it locally so subsequent rounds via this same
+    // plugin instance also short-circuit decoding.
+    if (!imageHashCache.has(contentHash)) imageHashCache.set(contentHash, imageHash);
+  }
+
+  const rect = figma.createRectangle();
+  rect.resize(p.width || 200, p.height || 200);
+  rect.x = p.x != null ? p.x : 0;
+  rect.y = p.y != null ? p.y : 0;
+  if (p.name) rect.name = p.name;
+  rect.fills = [{ type: "IMAGE", imageHash: imageHash!, scaleMode: p.scaleMode || "FILL" }];
+  (parent as any).appendChild(rect);
+  return { id: rect.id, name: rect.name, type: rect.type, bounds: getBounds(rect), imageHash: imageHash!, contentHash, cached };
+};
+
 export const handleWriteCreateRequest = async (request: any) => {
   switch (request.type) {
     case "create_frame": {
@@ -84,22 +163,50 @@ export const handleWriteCreateRequest = async (request: any) => {
 
     case "import_image": {
       const p = request.params || {};
-      if (!p.imageData) throw new Error("imageData (base64) is required");
       const parent = await getParentNode(p.parentId);
-      const bytes = base64ToBytes(p.imageData);
-      const image = figma.createImage(bytes);
-      const rect = figma.createRectangle();
-      rect.resize(p.width || 200, p.height || 200);
-      rect.x = p.x != null ? p.x : 0;
-      rect.y = p.y != null ? p.y : 0;
-      if (p.name) rect.name = p.name;
-      rect.fills = [{ type: "IMAGE", imageHash: image.hash, scaleMode: p.scaleMode || "FILL" }];
-      (parent as any).appendChild(rect);
+      const result = await createImageRect(p, parent);
       figma.commitUndo();
       return {
         type: request.type,
         requestId: request.requestId,
-        data: { id: rect.id, name: rect.name, type: rect.type, bounds: getBounds(rect) },
+        data: { id: result.id, name: result.name, type: result.type, bounds: result.bounds, imageHash: result.imageHash, contentHash: result.contentHash, cached: result.cached },
+      };
+    }
+
+    case "import_images": {
+      const p = request.params || {};
+      const parent = await getParentNode(p.parentId);
+      const items: any[] = Array.isArray(p.items) ? p.items : [];
+      const results: any[] = new Array(items.length);
+
+      // Sequential creation keeps the undo history coherent and the layer
+      // ordering deterministic. Image hashing is the actual heavy step and
+      // it's already pipelined per-item by the cache.
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i] || {};
+        try {
+          const r = await createImageRect(item, parent);
+          results[i] = { index: i, success: true, id: r.id, name: r.name, type: r.type, bounds: r.bounds, imageHash: r.imageHash, contentHash: r.contentHash, cached: r.cached };
+        } catch (err) {
+          results[i] = { index: i, success: false, error: (err as Error).message || String(err) };
+        }
+        if ((i + 1) % 5 === 0 && i + 1 < items.length) {
+          // Progress notification — bridge resets the inactivity timer so big
+          // batches don't trip the per-tool timeout.
+          figma.ui.postMessage({
+            type: "progress_update",
+            requestId: request.requestId,
+            progress: Math.max(1, Math.floor(((i + 1) / items.length) * 100)),
+            message: `${i + 1}/${items.length} imported`,
+          });
+        }
+      }
+
+      figma.commitUndo();
+      return {
+        type: request.type,
+        requestId: request.requestId,
+        data: { items: results },
       };
     }
 

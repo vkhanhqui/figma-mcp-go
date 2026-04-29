@@ -47,25 +47,13 @@ export const applyAutoLayout = (frame: FrameNode, p: any) => {
   }
 };
 
-export const base64ToBytes = (b64: string) => {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const lookup: Record<string, number> = {};
-  for (let i = 0; i < chars.length; i++) lookup[chars[i]] = i;
-  const padded = b64.replace(/[^A-Za-z0-9+/=]/g, "");
-  const clean = padded.replace(/=/g, "");
-  let outLen = Math.floor(padded.length * 3 / 4);
-  if (padded.endsWith("==")) outLen -= 2;
-  else if (padded.endsWith("=")) outLen -= 1;
-  const bytes = new Uint8Array(outLen);
-  let j = 0;
-  for (let i = 0; i < clean.length; i += 4) {
-    const a = lookup[clean[i]] || 0;
-    const bv = lookup[clean[i + 1]] || 0;
-    const c = lookup[clean[i + 2]] || 0;
-    const d = lookup[clean[i + 3]] || 0;
-    bytes[j++] = (a << 2) | (bv >> 4);
-    if (j < outLen) bytes[j++] = ((bv & 15) << 4) | (c >> 2);
-    if (j < outLen) bytes[j++] = ((c & 3) << 6) | d;
+export const base64ToBytes = (b64: string): Uint8Array => {
+  const native = (figma as any).base64Decode;
+  if (typeof native === "function") {
+    return native.call(figma, b64);
   }
-  return bytes;
+  const bin = atob(b64.replace(/[^A-Za-z0-9+/=]/g, ""));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 };
