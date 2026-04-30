@@ -80,6 +80,8 @@ func registerWriteCreateTools(s *server.MCPServer, node *Node) {
 		mcp.WithString("fillColor", mcp.Description("Text color as hex e.g. #000000 (default black)")),
 		mcp.WithString("name", mcp.Description("Node name shown in the layers panel (defaults to the text content)")),
 		mcp.WithString("parentId", mcp.Description("Parent node ID in colon format. Defaults to current page.")),
+		mcp.WithString("textTruncation", mcp.Description("Truncation behaviour: 'DISABLED' (default, no truncation) or 'ENDING' (truncate with an ellipsis)")),
+		mcp.WithNumber("maxLines", mcp.Description("Maximum number of lines before truncation (positive integer). Only applies when textTruncation is 'ENDING'.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		params := req.GetArguments()
 		resp, err := node.Send(ctx, "create_text", nil, params)
@@ -143,6 +145,21 @@ func registerWriteCreateTools(s *server.MCPServer, node *Node) {
 			params["name"] = name
 		}
 		resp, err := node.Send(ctx, "create_component", []string{nodeID}, params)
+		return renderResponse(resp, err)
+	})
+
+	s.AddTool(mcp.NewTool("create_instance",
+		mcp.WithDescription("Create a linked INSTANCE of a COMPONENT or COMPONENT_SET. Unlike clone_node (which makes an independent copy), an instance stays connected to its main component — edits to the main component propagate to all its instances. Pass componentId for a component in the current file, or componentKey to import a published library component from another file. For variant sets, pass variantProperties to pick a specific variant (otherwise the default variant is used)."),
+		mcp.WithString("componentId", mcp.Description("ID of a COMPONENT or COMPONENT_SET in the current file, in colon format e.g. '4029:12345'. Mutually exclusive with componentKey.")),
+		mcp.WithString("componentKey", mcp.Description("Published component key — used to import a component from another file's library. Find it via get_local_components on the source file or in Figma's library panel.")),
+		mcp.WithObject("variantProperties", mcp.Description("When componentId points to a COMPONENT_SET, an object of variant property name → value pairs to select which variant to instantiate (e.g. { \"Size\": \"Large\", \"State\": \"Hover\" }). If omitted, the default variant is used.")),
+		mcp.WithNumber("x", mcp.Description("X position in pixels (default 0)")),
+		mcp.WithNumber("y", mcp.Description("Y position in pixels (default 0)")),
+		mcp.WithString("name", mcp.Description("Optional name for the instance (defaults to the component's name)")),
+		mcp.WithString("parentId", mcp.Description("Parent node ID in colon format. Defaults to the current page.")),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		params := req.GetArguments()
+		resp, err := node.Send(ctx, "create_instance", nil, params)
 		return renderResponse(resp, err)
 	})
 

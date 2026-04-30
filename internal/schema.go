@@ -220,6 +220,22 @@ func ValidateRPC(tool string, nodeIDs []string, params map[string]interface{}) s
 			return fmt.Sprintf("nodeId must use colon format e.g. 4029:12345, got: %s", nodeIDs[0])
 		}
 
+	case "create_instance":
+		componentID, _ := params["componentId"].(string)
+		componentKey, _ := params["componentKey"].(string)
+		if componentID == "" && componentKey == "" {
+			return "componentId or componentKey is required"
+		}
+		if componentID != "" && componentKey != "" {
+			return "componentId and componentKey are mutually exclusive — provide one"
+		}
+		if componentID != "" && !ValidNodeID(componentID) {
+			return fmt.Sprintf("componentId must use colon format e.g. 4029:12345, got: %s", componentID)
+		}
+		if pid, ok := params["parentId"].(string); ok && pid != "" && !ValidNodeID(pid) {
+			return fmt.Sprintf("parentId must use colon format e.g. 4029:12345, got: %s", pid)
+		}
+
 	case "export_tokens":
 		if format, ok := params["format"].(string); ok && format != "" {
 			switch format {
@@ -280,8 +296,14 @@ func ValidateRPC(tool string, nodeIDs []string, params map[string]interface{}) s
 		if !ValidNodeID(nodeIDs[0]) {
 			return fmt.Sprintf("nodeId must use colon format e.g. 4029:12345, got: %s", nodeIDs[0])
 		}
-		if _, ok := params["text"].(string); !ok {
-			return "text is required"
+		_, hasText := params["text"].(string)
+		_, hasTrunc := params["textTruncation"]
+		_, hasMaxLines := params["maxLines"]
+		if !hasText && !hasTrunc && !hasMaxLines {
+			return "at least one of text, textTruncation, or maxLines is required"
+		}
+		if tt, ok := params["textTruncation"].(string); ok && tt != "DISABLED" && tt != "ENDING" {
+			return fmt.Sprintf("textTruncation must be 'DISABLED' or 'ENDING', got: %s", tt)
 		}
 
 	case "set_fills":

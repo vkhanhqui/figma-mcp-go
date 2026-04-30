@@ -214,13 +214,31 @@ func TestValidateRPC_SetText(t *testing.T) {
 	if msg := ValidateRPC("set_text", nil, map[string]interface{}{"text": "hello"}); msg == "" {
 		t.Error("expected error for missing nodeId")
 	}
-	// missing text
+	// no text, truncation, or maxLines
 	if msg := ValidateRPC("set_text", []string{"1:1"}, nil); msg == "" {
-		t.Error("expected error for missing text")
+		t.Error("expected error when no text/truncation/maxLines provided")
 	}
-	// valid
-	msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"text": "hello"})
-	if msg != "" {
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{}); msg == "" {
+		t.Error("expected error when no text/truncation/maxLines provided (empty params)")
+	}
+	// invalid textTruncation
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"textTruncation": "TRUNCATE"}); msg == "" {
+		t.Error("expected error for invalid textTruncation")
+	}
+	// valid: text only
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"text": "hello"}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	// valid: textTruncation only
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"textTruncation": "ENDING"}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	// valid: maxLines only
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"maxLines": float64(2)}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	// valid: maxLines = nil (clear)
+	if msg := ValidateRPC("set_text", []string{"1:1"}, map[string]interface{}{"maxLines": nil}); msg != "" {
 		t.Errorf("unexpected error: %s", msg)
 	}
 }
@@ -804,6 +822,46 @@ func TestValidateRPC_CreateComponent(t *testing.T) {
 	}
 	if msg := ValidateRPC("create_component", []string{"1:1"}, map[string]interface{}{"name": "MyComponent"}); msg != "" {
 		t.Errorf("unexpected error with name: %s", msg)
+	}
+}
+
+func TestValidateRPC_CreateInstance(t *testing.T) {
+	// missing both componentId and componentKey
+	if msg := ValidateRPC("create_instance", nil, nil); msg == "" {
+		t.Error("expected error when neither componentId nor componentKey provided")
+	}
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{}); msg == "" {
+		t.Error("expected error for empty params")
+	}
+	// both provided — mutually exclusive
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{
+		"componentId": "1:1", "componentKey": "abc",
+	}); msg == "" {
+		t.Error("expected error when both componentId and componentKey provided")
+	}
+	// invalid componentId format
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{"componentId": "bad-id"}); msg == "" {
+		t.Error("expected error for hyphen componentId")
+	}
+	// invalid parentId format
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{
+		"componentId": "1:1", "parentId": "bad",
+	}); msg == "" {
+		t.Error("expected error for invalid parentId")
+	}
+	// valid: componentId only
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{"componentId": "1:1"}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	// valid: componentKey only
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{"componentKey": "abc123"}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
+	}
+	// valid: componentId + parentId
+	if msg := ValidateRPC("create_instance", nil, map[string]interface{}{
+		"componentId": "1:1", "parentId": "2:2",
+	}); msg != "" {
+		t.Errorf("unexpected error: %s", msg)
 	}
 }
 

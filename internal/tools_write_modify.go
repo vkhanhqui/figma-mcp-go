@@ -9,19 +9,32 @@ import (
 
 func registerWriteModifyTools(s *server.MCPServer, node *Node) {
 	s.AddTool(mcp.NewTool("set_text",
-		mcp.WithDescription("Update the text content of an existing TEXT node."),
+		mcp.WithDescription("Update the text content and/or truncation behaviour of an existing TEXT node. At least one of text, textTruncation, or maxLines must be provided."),
 		mcp.WithString("nodeId",
 			mcp.Required(),
 			mcp.Description("TEXT node ID in colon format e.g. '4029:12345'"),
 		),
-		mcp.WithString("text",
-			mcp.Required(),
-			mcp.Description("New text content"),
-		),
+		mcp.WithString("text", mcp.Description("New text content (optional — omit to keep the existing characters)")),
+		mcp.WithString("textTruncation", mcp.Description("Truncation behaviour: 'DISABLED' (no truncation) or 'ENDING' (truncate with an ellipsis)")),
+		mcp.WithNumber("maxLines", mcp.Description("Maximum number of lines before truncation (positive integer). Only applies when textTruncation is 'ENDING'. Pass 0 to clear the cap (interpreted as null).")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		nodeID, _ := req.GetArguments()["nodeId"].(string)
-		text, _ := req.GetArguments()["text"].(string)
-		resp, err := node.Send(ctx, "set_text", []string{nodeID}, map[string]interface{}{"text": text})
+		args := req.GetArguments()
+		nodeID, _ := args["nodeId"].(string)
+		params := map[string]interface{}{}
+		if t, ok := args["text"].(string); ok {
+			params["text"] = t
+		}
+		if tt, ok := args["textTruncation"].(string); ok && tt != "" {
+			params["textTruncation"] = tt
+		}
+		if ml, ok := args["maxLines"].(float64); ok {
+			if ml == 0 {
+				params["maxLines"] = nil
+			} else {
+				params["maxLines"] = ml
+			}
+		}
+		resp, err := node.Send(ctx, "set_text", []string{nodeID}, params)
 		return renderResponse(resp, err)
 	})
 

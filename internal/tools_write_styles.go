@@ -40,6 +40,8 @@ func registerWriteStyleTools(s *server.MCPServer, node *Node) {
 		mcp.WithNumber("letterSpacingValue", mcp.Description("Letter spacing value (unit set by letterSpacingUnit)")),
 		mcp.WithString("letterSpacingUnit", mcp.Description("Letter spacing unit: PIXELS (default) or PERCENT")),
 		mcp.WithString("description", mcp.Description("Optional human-readable description shown in the Figma style panel")),
+		mcp.WithString("textTruncation", mcp.Description("Truncation behaviour: 'DISABLED' (default) or 'ENDING' (truncate with an ellipsis)")),
+		mcp.WithNumber("maxLines", mcp.Description("Maximum number of lines before truncation (positive integer). Only applies when textTruncation is 'ENDING'.")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		params := req.GetArguments()
 		resp, err := node.Send(ctx, "create_text_style", nil, params)

@@ -19,17 +19,24 @@ export const handleReadStyleRequest = async (request: any) => {
             name: s.name,
             paints: s.paints,
           })),
-          text: textStyles.map((s) => ({
-            id: s.id,
-            name: s.name,
-            fontSize: s.fontSize,
-            fontFamily: s.fontName ? s.fontName.family : undefined,
-            fontStyle: s.fontName ? s.fontName.style : undefined,
-            textDecoration:
-              s.textDecoration !== "NONE" ? s.textDecoration : undefined,
-            lineHeight: (s as any).lineHeight,
-            letterSpacing: (s as any).letterSpacing,
-          })),
+          text: textStyles.map((s) => {
+            const entry: any = {
+              id: s.id,
+              name: s.name,
+              fontSize: s.fontSize,
+              fontFamily: s.fontName ? s.fontName.family : undefined,
+              fontStyle: s.fontName ? s.fontName.style : undefined,
+              textDecoration:
+                s.textDecoration !== "NONE" ? s.textDecoration : undefined,
+              lineHeight: (s as any).lineHeight,
+              letterSpacing: (s as any).letterSpacing,
+            };
+            const trunc = (s as any).textTruncation;
+            if (trunc && trunc !== "DISABLED") entry.textTruncation = trunc;
+            const maxLines = (s as any).maxLines;
+            if (maxLines != null) entry.maxLines = maxLines;
+            return entry;
+          }),
           effects: effectStyles.map((s) => ({
             id: s.id,
             name: s.name,

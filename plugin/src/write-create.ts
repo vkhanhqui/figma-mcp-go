@@ -73,6 +73,23 @@ export const handleWriteCreateRequest = async (request: any) => {
       textNode.y = p.y != null ? p.y : 0;
       if (p.name) textNode.name = p.name;
       if (p.fillColor) textNode.fills = [makeSolidPaint(p.fillColor)];
+      if (p.textTruncation !== undefined) {
+        if (p.textTruncation !== "DISABLED" && p.textTruncation !== "ENDING") {
+          throw new Error(`textTruncation must be 'DISABLED' or 'ENDING', got: ${p.textTruncation}`);
+        }
+        textNode.textTruncation = p.textTruncation;
+      }
+      if (p.maxLines !== undefined) {
+        if (p.maxLines !== null) {
+          const n = Number(p.maxLines);
+          if (!Number.isFinite(n) || n < 1) {
+            throw new Error("maxLines must be null or a positive integer");
+          }
+          textNode.maxLines = n;
+        } else {
+          textNode.maxLines = null;
+        }
+      }
       (parent as any).appendChild(textNode);
       figma.commitUndo();
       return {
@@ -146,6 +163,70 @@ export const handleWriteCreateRequest = async (request: any) => {
         type: request.type,
         requestId: request.requestId,
         data: { id: component.id, name: component.name, type: component.type, bounds: getBounds(component) },
+      };
+    }
+
+    case "create_instance": {
+      const p = request.params || {};
+      const parent = await getParentNode(p.parentId);
+
+      let component: ComponentNode | null = null;
+
+      if (p.componentKey && typeof p.componentKey === "string") {
+        try {
+          component = await figma.importComponentByKeyAsync(p.componentKey);
+        } catch (err) {
+          throw new Error(`Failed to import component by key '${p.componentKey}': ${err instanceof Error ? err.message : String(err)}`);
+        }
+      } else if (p.componentId && typeof p.componentId === "string") {
+        const node = await figma.getNodeByIdAsync(p.componentId);
+        if (!node) throw new Error(`Component not found: ${p.componentId}`);
+        if (node.type === "COMPONENT") {
+          component = node as ComponentNode;
+        } else if (node.type === "COMPONENT_SET") {
+          // Pick a variant: explicit variantName/properties match, or the default (first child component).
+          const set = node as ComponentSetNode;
+          const variants = set.children.filter((c): c is ComponentNode => c.type === "COMPONENT");
+          if (variants.length === 0) throw new Error(`Component set ${p.componentId} has no variants`);
+          if (p.variantProperties && typeof p.variantProperties === "object") {
+            const wanted = p.variantProperties as Record<string, string>;
+            const match = variants.find((v) => {
+              const vp = v.variantProperties;
+              if (!vp) return false;
+              for (const k of Object.keys(wanted)) if (vp[k] !== wanted[k]) return false;
+              return true;
+            });
+            if (!match) throw new Error(`No variant in set ${p.componentId} matches properties: ${JSON.stringify(wanted)}`);
+            component = match;
+          } else {
+            component = (set as any).defaultVariant ?? variants[0];
+          }
+        } else if (node.type === "INSTANCE") {
+          throw new Error(`Node ${p.componentId} is an INSTANCE, not a COMPONENT — pass its mainComponentId, or use clone_node if you only need a visual copy`);
+        } else {
+          throw new Error(`Node ${p.componentId} is type ${node.type} — must be COMPONENT or COMPONENT_SET`);
+        }
+      } else {
+        throw new Error("componentId or componentKey is required");
+      }
+
+      const instance = component!.createInstance();
+      if (p.x != null) instance.x = Number(p.x);
+      if (p.y != null) instance.y = Number(p.y);
+      if (p.name) instance.name = p.name;
+      (parent as any).appendChild(instance);
+      figma.commitUndo();
+      return {
+        type: request.type,
+        requestId: request.requestId,
+        data: {
+          id: instance.id,
+          name: instance.name,
+          type: instance.type,
+          bounds: getBounds(instance),
+          mainComponentId: component!.id,
+          mainComponentKey: component!.key,
+        },
       };
     }
 

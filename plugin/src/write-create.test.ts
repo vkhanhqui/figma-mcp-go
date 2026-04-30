@@ -198,3 +198,128 @@ describe("create_section", () => {
     expect(res?.data.id).toBe("section:new");
   });
 });
+
+// ── create_instance ───────────────────────────────────────────────────────────
+
+describe("create_instance", () => {
+  let createdInstances: any[];
+  let parentNode: any;
+  let importedKey: string | null;
+
+  const makeComponent = (overrides?: any) => ({
+    id: "comp:src",
+    name: "SourceComponent",
+    type: "COMPONENT",
+    key: "abc123def456",
+    createInstance() {
+      const inst = {
+        id: `inst:${createdInstances.length + 1}`,
+        name: this.name,
+        type: "INSTANCE",
+        x: 0, y: 0, width: 100, height: 100,
+      };
+      createdInstances.push(inst);
+      return inst;
+    },
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    createdInstances = [];
+    importedKey = null;
+    parentNode = { id: "page:1", appendChild(c: any) { (this.children ||= []).push(c); }, children: [] };
+    (globalThis as any).figma = {
+      ...(globalThis as any).figma,
+      currentPage: parentNode,
+      getNodeByIdAsync: async (id: string) => mockNodes[id] ?? null,
+      importComponentByKeyAsync: async (key: string) => {
+        importedKey = key;
+        return makeComponent({ id: "lib:1", name: "LibComponent", key });
+      },
+      commitUndo: () => { commitUndoCalled = true; },
+    };
+  });
+
+  it("creates an instance from componentId pointing to a COMPONENT", async () => {
+    mockNodes["comp:src"] = makeComponent();
+    const res = await handleWriteCreateRequest(makeRequest("create_instance", [], { componentId: "comp:src" }));
+    expect(res?.data.type).toBe("INSTANCE");
+    expect(res?.data.mainComponentId).toBe("comp:src");
+    expect(res?.data.mainComponentKey).toBe("abc123def456");
+    expect(commitUndoCalled).toBe(true);
+    expect(parentNode.children).toHaveLength(1);
+  });
+
+  it("imports a library component by key", async () => {
+    const res = await handleWriteCreateRequest(makeRequest("create_instance", [], { componentKey: "abc123def456" }));
+    expect(importedKey).toBe("abc123def456");
+    expect(res?.data.mainComponentId).toBe("lib:1");
+    expect(res?.data.type).toBe("INSTANCE");
+  });
+
+  it("picks the default variant when given a COMPONENT_SET without variantProperties", async () => {
+    const variantA = makeComponent({ id: "v:a", name: "A", variantProperties: { Size: "Small" } });
+    const variantB = makeComponent({ id: "v:b", name: "B", variantProperties: { Size: "Large" } });
+    mockNodes["set:1"] = {
+      id: "set:1", name: "Button", type: "COMPONENT_SET",
+      children: [variantA, variantB],
+      defaultVariant: variantA,
+    };
+    const res = await handleWriteCreateRequest(makeRequest("create_instance", [], { componentId: "set:1" }));
+    expect(res?.data.mainComponentId).toBe("v:a");
+  });
+
+  it("picks the matching variant when variantProperties are provided", async () => {
+    const variantA = makeComponent({ id: "v:a", name: "A", variantProperties: { Size: "Small", State: "Default" } });
+    const variantB = makeComponent({ id: "v:b", name: "B", variantProperties: { Size: "Large", State: "Hover" } });
+    mockNodes["set:1"] = { id: "set:1", type: "COMPONENT_SET", children: [variantA, variantB] };
+    const res = await handleWriteCreateRequest(makeRequest("create_instance", [], {
+      componentId: "set:1",
+      variantProperties: { Size: "Large", State: "Hover" },
+    }));
+    expect(res?.data.mainComponentId).toBe("v:b");
+  });
+
+  it("rejects when no variant matches the requested properties", async () => {
+    const variantA = makeComponent({ id: "v:a", variantProperties: { Size: "Small" } });
+    mockNodes["set:1"] = { id: "set:1", type: "COMPONENT_SET", children: [variantA] };
+    await expect(
+      handleWriteCreateRequest(makeRequest("create_instance", [], {
+        componentId: "set:1",
+        variantProperties: { Size: "XL" },
+      })),
+    ).rejects.toThrow("No variant in set");
+  });
+
+  it("rejects an INSTANCE id with a clear message", async () => {
+    mockNodes["inst:1"] = { id: "inst:1", type: "INSTANCE" };
+    await expect(
+      handleWriteCreateRequest(makeRequest("create_instance", [], { componentId: "inst:1" })),
+    ).rejects.toThrow("is an INSTANCE, not a COMPONENT");
+  });
+
+  it("rejects unrelated node types", async () => {
+    mockNodes["frame:1"] = { id: "frame:1", type: "FRAME" };
+    await expect(
+      handleWriteCreateRequest(makeRequest("create_instance", [], { componentId: "frame:1" })),
+    ).rejects.toThrow("must be COMPONENT or COMPONENT_SET");
+  });
+
+  it("rejects when neither componentId nor componentKey is provided", async () => {
+    await expect(
+      handleWriteCreateRequest(makeRequest("create_instance", [], {})),
+    ).rejects.toThrow("componentId or componentKey is required");
+  });
+
+  it("applies x, y and name overrides", async () => {
+    mockNodes["comp:src"] = makeComponent();
+    const res = await handleWriteCreateRequest(makeRequest("create_instance", [], {
+      componentId: "comp:src", x: 50, y: 75, name: "Renamed",
+    }));
+    const inst = createdInstances[0];
+    expect(inst.x).toBe(50);
+    expect(inst.y).toBe(75);
+    expect(inst.name).toBe("Renamed");
+    expect(res?.data.name).toBe("Renamed");
+  });
+});
