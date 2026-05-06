@@ -143,13 +143,15 @@ export const serializeText = async (node: any, base: any) => {
 
 export const serializeNode = async (node: any): Promise<any> => {
   const styles = await serializeStyles(node);
-  const base = {
+  const base: any = {
     id: node.id,
     name: node.name,
     type: node.type,
     bounds: getBounds(node),
     styles,
   };
+  if ("opacity" in node && node.opacity !== 1) base.opacity = node.opacity;
+  if ("visible" in node && !node.visible) base.visible = false;
   if (node.type === "TEXT") return serializeText(node, base);
   if ("children" in node) {
     return Object.assign({}, base, {
