@@ -32,7 +32,8 @@
       socket.onclose = null;
       socket.close();
     }
-    const ws = new WebSocket(`ws://${serverHost}:${serverPort}/ws`);
+    const scheme = serverPort === "443" ? "wss" : "ws";
+    const ws = new WebSocket(`${scheme}://${serverHost}:${serverPort}/ws`);
     socket = ws;
 
     ws.onopen = () => {
