@@ -18,7 +18,7 @@ export const serializePaints = (paints: any) => {
   if (!paints || !Array.isArray(paints)) return undefined;
 
   const result = paints
-    .filter((paint: any) => paint.type === "SOLID" && "color" in paint)
+    .filter((paint: any) => paint.type === "SOLID" && "color" in paint && paint.visible !== false)
     .map((paint: any) => {
       const hex = toHex(paint.color);
       const opacity = paint.opacity != null ? paint.opacity : 1;
