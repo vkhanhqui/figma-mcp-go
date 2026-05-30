@@ -264,3 +264,51 @@ Issues and PRs are welcome.
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=vkhanhqui/figma-mcp-go&type=date&legend=top-left" />
  </picture>
 </a>
+
+## FAQ
+
+### What is Figma MCP Go?
+Figma MCP Go is an open-source Figma MCP server that provides full read/write access via a plugin bridge, eliminating REST API and rate limit constraints. It works with Cursor, Claude, GitHub Copilot, and any MCP-compatible AI tool.
+
+### Key Features
+| Feature | Description |
+|---------|-------------|
+| No API Token Required | Works via plugin bridge, no Figma REST API |
+| No Rate Limits | Free plan friendly, unlimited calls |
+| Read & Write Access | 73 tools for full design automation |
+| Design Automation | Styles, variables, components, prototypes |
+| Design Strategies | Built-in prompts and strategies |
+| Cross-Tool Support | Cursor, Claude, Copilot, MCP tools |
+
+### How do I install Figma MCP Go?
+```bash
+# Claude Code CLI
+claude mcp add -s project figma-mcp-go -- npx -y @vkhanhqui/figma-mcp-go@latest
+
+# Codex CLI
+codex mcp add figma-mcp-go -- npx -y @vkhanhqui/figma-mcp-go@latest
+```
+
+Also install the Figma plugin from the [plugin.zip](https://github.com/vkhanhqui/figma-mcp-go/releases).
+
+### Requirements
+- Figma Desktop App
+- Node.js (for npx)
+- MCP-compatible AI tool (Claude, Cursor, Copilot, etc.)
+
+### Why use Figma MCP Go instead of Figma REST API?
+| Plan | REST API Limit |
+|------|----------------|
+| Starter / View / Collab | 6 tool calls/month |
+| Pro / Org (Dev seat) | 200 tool calls/day |
+| Enterprise | 600 tool calls/day |
+
+Figma MCP Go bypasses all limits by using the plugin bridge.
+
+### License
+MIT License - free to use and modify.
+
+### Help Resources
+- [GitHub Issues](https://github.com/vkhanhqui/figma-mcp-go/issues)
+- [Setup Video](https://youtu.be/DjqyU0GKv9k)
+- [MCP Registry](https://registry.modelcontextprotocol.io/?q=figma-mcp-go)
