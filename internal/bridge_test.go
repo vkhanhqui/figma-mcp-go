@@ -56,6 +56,28 @@ func TestNewBridge(t *testing.T) {
 	}
 }
 
+func TestBridgeHandleUpgrade_RequiresAuthToken(t *testing.T) {
+	bridge := NewBridgeWithAuth("secret")
+	srv := httptest.NewServer(http.HandlerFunc(bridge.HandleUpgrade))
+	t.Cleanup(srv.Close)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	conn, resp, err := websocket.Dial(context.Background(), wsURL, nil)
+	if err == nil {
+		conn.Close(websocket.StatusNormalClosure, "") //nolint:errcheck
+		t.Fatal("expected unauthenticated websocket dial to fail")
+	}
+	if resp == nil || resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %v, want 401", resp)
+	}
+
+	conn, _, err = websocket.Dial(context.Background(), wsURL+"?token=secret", nil)
+	if err != nil {
+		t.Fatalf("authenticated ws dial: %v", err)
+	}
+	t.Cleanup(func() { conn.Close(websocket.StatusNormalClosure, "") })
+}
+
 // ── nextID ────────────────────────────────────────────────────────────────────
 
 func TestBridgeNextID(t *testing.T) {

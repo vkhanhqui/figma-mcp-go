@@ -28,17 +28,24 @@ type pendingEntry struct {
 // Bridge manages the single WebSocket connection from the Figma plugin
 // and matches responses to pending requests via request IDs.
 type Bridge struct {
-	mu      sync.RWMutex
-	wmu     sync.Mutex // serialises concurrent WebSocket writes (coder/websocket does not support concurrent writes)
-	conn    *websocket.Conn
-	pending map[string]*pendingEntry
-	counter atomic.Int64
+	mu        sync.RWMutex
+	wmu       sync.Mutex // serialises concurrent WebSocket writes (coder/websocket does not support concurrent writes)
+	conn      *websocket.Conn
+	pending   map[string]*pendingEntry
+	counter   atomic.Int64
+	authToken string
 }
 
 // NewBridge creates a ready-to-use Bridge.
 func NewBridge() *Bridge {
+	return NewBridgeWithAuth("")
+}
+
+// NewBridgeWithAuth creates a bridge that requires authToken when it is set.
+func NewBridgeWithAuth(authToken string) *Bridge {
 	return &Bridge{
-		pending: make(map[string]*pendingEntry),
+		pending:   make(map[string]*pendingEntry),
+		authToken: authToken,
 	}
 }
 
@@ -46,6 +53,12 @@ func NewBridge() *Bridge {
 // Only one plugin connection is maintained at a time; a new connection
 // replaces the old one (same behaviour as the TypeScript version).
 func (b *Bridge) HandleUpgrade(w http.ResponseWriter, r *http.Request) {
+	if !requestAuthorized(r, b.authToken) {
+		writeUnauthorized(w)
+		bridgeLogger.Printf("rejected unauthorized plugin connection from %s", r.RemoteAddr)
+		return
+	}
+
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		InsecureSkipVerify: true, // skip Origin check — plugin connects via Figma's sandbox
 	})
@@ -181,7 +194,7 @@ func (b *Bridge) Send(ctx context.Context, requestType string, nodeIDs []string,
 	b.pending[requestID] = entry
 	b.mu.Unlock()
 
-	bridgeLogger.Printf("→ %s %s nodeIDs=%v params=%v", requestID, requestType, nodeIDs, params)
+	bridgeLogger.Printf("→ %s %s nodeIDs=%v paramKeys=%v", requestID, requestType, nodeIDs, paramKeys(params))
 	start := time.Now()
 
 	b.wmu.Lock()

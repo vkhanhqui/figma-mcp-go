@@ -98,6 +98,48 @@ codex mcp add figma-mcp-go -- npx -y @vkhanhqui/figma-mcp-go@latest
 2. Select `manifest.json` from the [plugin.zip](https://github.com/vkhanhqui/figma-mcp-go/releases)
 3. Run the plugin inside any Figma file
 
+### 3. Recommended security setup
+
+By default, the bridge listens on `127.0.0.1:1994` and preserves the original no-token local workflow. For safer use, set a shared token on the MCP server and paste the same token into the Figma plugin settings.
+
+Generate a token:
+```bash
+openssl rand -hex 32
+```
+
+Use the token through an environment variable:
+```bash
+FIGMA_MCP_AUTH_TOKEN="<generated-token>" npx -y @vkhanhqui/figma-mcp-go@latest
+```
+
+Or pass it as a server flag:
+```bash
+npx -y @vkhanhqui/figma-mcp-go@latest --auth-token "<generated-token>"
+```
+
+For MCP config files, prefer environment-variable injection from your shell or secret manager. If your MCP client requires an `env` block, do not commit that config with a real token:
+```json
+{
+  "mcpServers": {
+    "figma-mcp-go": {
+      "command": "npx",
+      "args": ["-y", "@vkhanhqui/figma-mcp-go"],
+      "env": {
+        "FIGMA_MCP_AUTH_TOKEN": "<generated-token>"
+      }
+    }
+  }
+}
+```
+
+In the Figma plugin, click the server address, enter the same token in the `auth token` field, and apply.
+
+Security notes:
+- Keep the default `--ip 127.0.0.1` unless you have a specific reason to expose the bridge.
+- Do not use `--ip 0.0.0.0` without a firewall and `FIGMA_MCP_AUTH_TOKEN` or `--auth-token`.
+- The plugin has full read/write access to the open Figma file while connected.
+- Tools such as `save_screenshots` and `export_frames_to_pdf` can write files under the MCP server working directory.
+
 ---
 
 ## Available Tools

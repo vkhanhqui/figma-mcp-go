@@ -18,12 +18,19 @@ var followerLogger = log.New(os.Stderr, "[follower] ", 0)
 type Follower struct {
 	leaderURL string
 	client    *http.Client
+	authToken string
 }
 
 // NewFollower creates a Follower pointed at the given leader base URL.
 func NewFollower(leaderURL string) *Follower {
+	return NewFollowerWithAuth(leaderURL, "")
+}
+
+// NewFollowerWithAuth creates a Follower that sends authToken when it is set.
+func NewFollowerWithAuth(leaderURL string, authToken string) *Follower {
 	return &Follower{
 		leaderURL: leaderURL,
+		authToken: authToken,
 		client: &http.Client{
 			// 35s > 30s bridge timeout — gives the leader time to time out first
 			Timeout: 35 * time.Second,
@@ -33,7 +40,7 @@ func NewFollower(leaderURL string) *Follower {
 
 // Send proxies a tool call to the leader.
 func (f *Follower) Send(ctx context.Context, tool string, nodeIDs []string, params map[string]interface{}) (BridgeResponse, error) {
-	followerLogger.Printf("proxy %s nodeIDs=%v params=%v → %s/rpc", tool, nodeIDs, params, f.leaderURL)
+	followerLogger.Printf("proxy %s nodeIDs=%v paramKeys=%v → %s/rpc", tool, nodeIDs, paramKeys(params), f.leaderURL)
 	start := time.Now()
 
 	rpcReq := RPCRequest{
@@ -52,6 +59,7 @@ func (f *Follower) Send(ctx context.Context, tool string, nodeIDs []string, para
 		return BridgeResponse{}, fmt.Errorf("new request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	f.authorize(req)
 
 	resp, err := f.client.Do(req)
 	if err != nil {
@@ -92,6 +100,7 @@ func (f *Follower) Ping(ctx context.Context) bool {
 		followerLogger.Printf("ping new request error: %v", err)
 		return false
 	}
+	f.authorize(req)
 
 	resp, err := f.client.Do(req)
 	if err != nil {
@@ -102,4 +111,10 @@ func (f *Follower) Ping(ctx context.Context) bool {
 	ok := resp.StatusCode == http.StatusOK
 	followerLogger.Printf("ping %s → %d (healthy=%v)", f.leaderURL, resp.StatusCode, ok)
 	return ok
+}
+
+func (f *Follower) authorize(req *http.Request) {
+	if f.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+f.authToken)
+	}
 }

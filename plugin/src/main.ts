@@ -30,7 +30,7 @@ const handleRequest = async (request: any) => {
   }
 };
 
-figma.showUI(__html__, { width: 320, height: 230 });
+figma.showUI(__html__, { width: 320, height: 250 });
 sendStatus();
 
 figma.on("selectionchange", () => {
@@ -52,6 +52,7 @@ figma.ui.onmessage = async (message) => {
       type: "ws_config",
       host: config?.host ?? "127.0.0.1",
       port: config?.port ?? "1994",
+      authToken: config?.authToken ?? "",
     });
     return;
   }
@@ -59,6 +60,7 @@ figma.ui.onmessage = async (message) => {
     await figma.clientStorage.setAsync("ws_config", {
       host: message.host,
       port: message.port,
+      authToken: message.authToken ?? "",
     });
     return;
   }

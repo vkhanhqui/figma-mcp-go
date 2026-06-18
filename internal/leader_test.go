@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -45,6 +46,25 @@ func TestLeaderHandlePing_MethodNotAllowed(t *testing.T) {
 		if w.Code != http.StatusMethodNotAllowed {
 			t.Errorf("%s /ping: status = %d, want 405", method, w.Code)
 		}
+	}
+}
+
+func TestLeaderHandlePing_RequiresAuthToken(t *testing.T) {
+	l := NewLeaderWithAuth("127.0.0.1", 0, "", "secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	w := httptest.NewRecorder()
+	l.handlePing(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status = %d, want 401", w.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	w = httptest.NewRecorder()
+	l.handlePing(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("authenticated status = %d, want 200", w.Code)
 	}
 }
 
@@ -119,6 +139,52 @@ func TestLeaderHandleRPC_BridgeNotConnected(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp.Error == "" {
 		t.Error("expected 'plugin not connected' error in response")
+	}
+}
+
+func TestLeaderHandleRPC_RequiresAuthToken(t *testing.T) {
+	l := NewLeaderWithAuth("127.0.0.1", 0, "", "secret")
+	body, _ := json.Marshal(RPCRequest{Tool: "get_document"})
+
+	req := httptest.NewRequest(http.MethodPost, "/rpc", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+	l.handleRPC(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated status = %d, want 401", w.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/rpc", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer wrong")
+	w = httptest.NewRecorder()
+	l.handleRPC(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong token status = %d, want 401", w.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/rpc", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer secret")
+	w = httptest.NewRecorder()
+	l.handleRPC(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("authenticated status = %d, want 200", w.Code)
+	}
+}
+
+func TestLeaderHandleRPC_RequestBodyTooLarge(t *testing.T) {
+	l := NewLeader("127.0.0.1", 0, "")
+
+	body := strings.NewReader(strings.Repeat("x", int(maxRPCBodyBytes)+1))
+	req := httptest.NewRequest(http.MethodPost, "/rpc", body)
+	w := httptest.NewRecorder()
+	l.handleRPC(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want 413", w.Code)
+	}
+	var resp RPCResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Error == "" {
+		t.Error("expected body-too-large error in response")
 	}
 }
 

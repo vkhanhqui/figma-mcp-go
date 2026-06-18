@@ -22,10 +22,15 @@ type Election struct {
 
 // NewElection creates an Election for the given ip, port, and node.
 func NewElection(ip string, port int, node *Node) *Election {
+	return NewElectionWithAuth(ip, port, node, "")
+}
+
+// NewElectionWithAuth creates an Election that uses authToken for leader health checks.
+func NewElectionWithAuth(ip string, port int, node *Node, authToken string) *Election {
 	return &Election{
 		port:     port,
 		node:     node,
-		follower: NewFollower("http://" + ip + ":" + itoa(port)),
+		follower: NewFollowerWithAuth("http://"+ip+":"+itoa(port), authToken),
 	}
 }
 
@@ -106,4 +111,3 @@ func (e *Election) tick(ctx context.Context) error {
 func itoa(n int) string {
 	return fmt.Sprintf("%d", n)
 }
-

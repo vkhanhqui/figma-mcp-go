@@ -11,10 +11,10 @@
   "devDependencies": {
     "@figma/plugin-typings": "^1",
     "@sveltejs/vite-plugin-svelte": "^5",
-    "concurrently": "^9",
-    "svelte": "^5",
+    "concurrently": "^9.2.3",
+    "svelte": "^5.56.3",
     "typescript": "^5",
-    "vite": "^6",
+    "vite": "^6.4.3",
     "vite-plugin-singlefile": "^2"
   }
 }

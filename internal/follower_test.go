@@ -46,6 +46,23 @@ func TestFollowerPing_NonOKStatus(t *testing.T) {
 	}
 }
 
+func TestFollowerPing_SendsAuthToken(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	f := NewFollowerWithAuth(srv.URL, "secret")
+	if !f.Ping(context.Background()) {
+		t.Fatal("expected Ping to return true")
+	}
+	if gotAuth != "Bearer secret" {
+		t.Fatalf("Authorization = %q, want Bearer secret", gotAuth)
+	}
+}
+
 // ── Send ─────────────────────────────────────────────────────────────────────
 
 func TestFollowerSend_Success(t *testing.T) {
@@ -139,5 +156,23 @@ func TestFollowerSend_ForwardsParams(t *testing.T) {
 	}
 	if len(capturedReq.NodeIDs) != 1 || capturedReq.NodeIDs[0] != "2:3" {
 		t.Errorf("nodeIDs = %v, want [2:3]", capturedReq.NodeIDs)
+	}
+}
+
+func TestFollowerSend_SendsAuthToken(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(RPCResponse{Data: "ok"})
+	}))
+	t.Cleanup(srv.Close)
+
+	f := NewFollowerWithAuth(srv.URL, "secret")
+	if _, err := f.Send(context.Background(), "get_document", nil, nil); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if gotAuth != "Bearer secret" {
+		t.Fatalf("Authorization = %q, want Bearer secret", gotAuth)
 	}
 }

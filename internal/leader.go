@@ -23,20 +23,27 @@ var leaderLogger = log.New(os.Stderr, "[leader] ", 0)
 //	/ping — Health check (GET)
 //	/rpc  — JSON RPC for follower tool calls (POST)
 type Leader struct {
-	ip      string
-	port    int
-	bridge  *Bridge
-	server  *http.Server
-	version string
+	ip        string
+	port      int
+	bridge    *Bridge
+	server    *http.Server
+	version   string
+	authToken string
 }
 
 // NewLeader creates a Leader. Call Start() to bind the ip:port.
 func NewLeader(ip string, port int, version string) *Leader {
+	return NewLeaderWithAuth(ip, port, version, "")
+}
+
+// NewLeaderWithAuth creates a Leader that requires authToken when it is set.
+func NewLeaderWithAuth(ip string, port int, version string, authToken string) *Leader {
 	return &Leader{
-		ip:      ip,
-		port:    port,
-		bridge:  NewBridge(),
-		version: version,
+		ip:        ip,
+		port:      port,
+		bridge:    NewBridgeWithAuth(authToken),
+		version:   version,
+		authToken: authToken,
 	}
 }
 
@@ -86,6 +93,10 @@ func (l *Leader) handlePing(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !requestAuthorized(r, l.authToken) {
+		writeUnauthorized(w)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(map[string]string{
 		"status":  "ok",
@@ -107,9 +118,19 @@ func (l *Leader) handleRPC(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !requestAuthorized(r, l.authToken) {
+		writeUnauthorized(w)
+		return
+	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxRPCBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			l.sendJSON(w, http.StatusRequestEntityTooLarge, RPCResponse{Error: "request body too large"})
+			return
+		}
 		l.sendJSON(w, http.StatusBadRequest, RPCResponse{Error: "failed to read body"})
 		return
 	}
@@ -120,7 +141,7 @@ func (l *Leader) handleRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	leaderLogger.Printf("rpc %s nodeIDs=%v from %s", req.Tool, req.NodeIDs, r.RemoteAddr)
+	leaderLogger.Printf("rpc %s nodeIDs=%v paramKeys=%v from %s", req.Tool, req.NodeIDs, paramKeys(req.Params), r.RemoteAddr)
 
 	if validationErr := ValidateRPC(req.Tool, req.NodeIDs, req.Params); validationErr != "" {
 		leaderLogger.Printf("rpc %s validation error: %s", req.Tool, validationErr)

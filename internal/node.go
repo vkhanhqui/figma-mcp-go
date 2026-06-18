@@ -13,23 +13,30 @@ var nodeLogger = log.New(os.Stderr, "[node] ", 0)
 // Node dynamically routes MCP tool calls to either the Leader bridge
 // or the Follower HTTP proxy, depending on the current role.
 type Node struct {
-	mu       sync.RWMutex
-	role     Role
-	ip       string
-	port     int
-	leader   *Leader
-	follower *Follower
-	version  string
+	mu        sync.RWMutex
+	role      Role
+	ip        string
+	port      int
+	leader    *Leader
+	follower  *Follower
+	version   string
+	authToken string
 }
 
 // NewNode creates a Node in the Unknown role.
 func NewNode(ip string, port int, version string) *Node {
+	return NewNodeWithAuth(ip, port, version, "")
+}
+
+// NewNodeWithAuth creates a Node that requires authToken when it becomes leader.
+func NewNodeWithAuth(ip string, port int, version string, authToken string) *Node {
 	return &Node{
-		ip:       ip,
-		port:     port,
-		role:     RoleUnknown,
-		version:  version,
-		follower: NewFollower(fmt.Sprintf("http://%s:%d", ip, port)),
+		ip:        ip,
+		port:      port,
+		role:      RoleUnknown,
+		version:   version,
+		authToken: authToken,
+		follower:  NewFollowerWithAuth(fmt.Sprintf("http://%s:%d", ip, port), authToken),
 	}
 }
 
@@ -88,7 +95,7 @@ func (n *Node) BecomeLeader() error {
 		return nil
 	}
 
-	leader := NewLeader(n.ip, n.port, n.version)
+	leader := NewLeaderWithAuth(n.ip, n.port, n.version, n.authToken)
 	if err := leader.Start(); err != nil {
 		return err
 	}

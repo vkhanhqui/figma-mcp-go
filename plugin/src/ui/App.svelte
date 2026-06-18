@@ -13,10 +13,12 @@
   // is unavailable inside Figma's data: URL sandbox.
   let serverHost = "127.0.0.1";
   let serverPort = "1994";
+  let serverToken = "";
 
   let showSettings = false;
   let editHost = serverHost;
   let editPort = serverPort;
+  let editToken = serverToken;
 
   const RECONNECT_DELAY_MS = 1500;
 
@@ -32,7 +34,9 @@
       socket.onclose = null;
       socket.close();
     }
-    const ws = new WebSocket(`ws://${serverHost}:${serverPort}/ws`);
+    const token = serverToken.trim();
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : "";
+    const ws = new WebSocket(`ws://${serverHost}:${serverPort}/ws${tokenQuery}`);
     socket = ws;
 
     ws.onopen = () => {
@@ -79,6 +83,7 @@
     if (msg.type === "ws_config") {
       serverHost = msg.host ?? "127.0.0.1";
       serverPort = msg.port ?? "1994";
+      serverToken = msg.authToken ?? "";
       if (!configLoaded) {
         configLoaded = true;
         connect();
@@ -107,6 +112,7 @@
   function openSettings() {
     editHost = serverHost;
     editPort = serverPort;
+    editToken = serverToken;
     showSettings = true;
   }
 
@@ -114,10 +120,18 @@
     serverHost = editHost.trim() || "127.0.0.1";
     const p = parseInt(editPort, 10);
     serverPort = p > 0 && p <= 65535 ? String(p) : "1994";
+    serverToken = editToken.trim();
     // Persist via plugin core (figma.clientStorage), since localStorage is
     // unavailable in Figma's data: URL environment.
     parent.postMessage(
-      { pluginMessage: { type: "save_ws_config", host: serverHost, port: serverPort } },
+      {
+        pluginMessage: {
+          type: "save_ws_config",
+          host: serverHost,
+          port: serverPort,
+          authToken: serverToken,
+        },
+      },
       "*"
     );
     showSettings = false;
@@ -185,28 +199,37 @@
     <div class="footer-row">
       {#if showSettings}
         <div class="settings-panel">
+          <div class="settings-line">
+            <input
+              class="addr-input"
+              bind:value={editHost}
+              placeholder="127.0.0.1"
+              on:keydown={handleKeydown}
+            />
+            <span class="addr-sep">:</span>
+            <input
+              class="port-input"
+              bind:value={editPort}
+              placeholder="1994"
+              on:keydown={handleKeydown}
+            />
+            <button class="apply-btn" on:click={applySettings} title="Apply">✓</button>
+            <button class="cancel-btn" on:click={() => showSettings = false} title="Cancel">✕</button>
+          </div>
           <input
-            class="addr-input"
-            bind:value={editHost}
-            placeholder="127.0.0.1"
+            class="token-input"
+            type="password"
+            bind:value={editToken}
+            placeholder="auth token"
             on:keydown={handleKeydown}
           />
-          <span class="addr-sep">:</span>
-          <input
-            class="port-input"
-            bind:value={editPort}
-            placeholder="1994"
-            on:keydown={handleKeydown}
-          />
-          <button class="apply-btn" on:click={applySettings} title="Apply">✓</button>
-          <button class="cancel-btn" on:click={() => showSettings = false} title="Cancel">✕</button>
         </div>
       {:else}
         <button
           class="server-addr"
           on:click={openSettings}
           title="Click to configure server address"
-        >{serverHost}:{serverPort}</button>
+        >{serverHost}:{serverPort}{serverToken ? " auth" : ""}</button>
       {/if}
       <div class="badge" class:connected class:disconnected={!connected}>
         <span class="dot" class:connected></span>
@@ -401,9 +424,17 @@
   /* Inline settings panel — takes remaining space so inputs aren't squished */
   .settings-panel {
     display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .settings-line {
+    display: flex;
     align-items: center;
     gap: 6px;
-    flex: 1;
   }
 
   .addr-input {
@@ -435,6 +466,23 @@
   }
 
   .port-input:focus {
+    border-color: #555;
+  }
+
+  .token-input {
+    width: 100%;
+    min-width: 0;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-size: 10px;
+    font-family: monospace;
+    padding: 2px 4px;
+    outline: none;
+  }
+
+  .token-input:focus {
     border-color: #555;
   }
 
