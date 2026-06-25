@@ -137,6 +137,9 @@ export const serializeText = async (node: any, base: any) => {
       textAlignHorizontal: isMixed(node.textAlignHorizontal)
         ? "mixed"
         : node.textAlignHorizontal,
+      textAlignVertical: isMixed(node.textAlignVertical)
+        ? "mixed"
+        : node.textAlignVertical,
     }),
   });
 };
