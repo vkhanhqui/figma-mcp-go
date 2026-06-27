@@ -371,6 +371,23 @@ describe("serializeText", () => {
     expect(result.characters).toBe("hello");
   });
 
+  it("includes vertical text alignment", async () => {
+    const node = {
+      fontName: { family: "Inter", style: "Regular" },
+      fontSize: 14,
+      fontWeight: 400,
+      textDecoration: "NONE",
+      lineHeight: { unit: "AUTO" },
+      letterSpacing: { value: 0, unit: "PIXELS" },
+      textAlignHorizontal: "CENTER",
+      textAlignVertical: "BOTTOM",
+      characters: "aligned",
+    };
+    const result = await serializeText(node, makeBase());
+    expect(result.styles.textAlignHorizontal).toBe("CENTER");
+    expect(result.styles.textAlignVertical).toBe("BOTTOM");
+  });
+
   it("includes textStyle when textStyleId resolves", async () => {
     mockGetStyleByIdAsync = async (id) => (id === "ts-1" ? { name: "Heading 1" } : null);
     const node = {
@@ -413,6 +430,7 @@ describe("serializeText", () => {
       lineHeight: { unit: "AUTO" },
       letterSpacing: { value: 0, unit: "PIXELS" },
       textAlignHorizontal: Symbol(),
+      textAlignVertical: Symbol(),
       characters: "mixed",
     };
     const result = await serializeText(node, makeBase());
@@ -420,6 +438,7 @@ describe("serializeText", () => {
     expect(result.styles.fontWeight).toBe("mixed");
     expect(result.styles.textDecoration).toBe("mixed");
     expect(result.styles.textAlignHorizontal).toBe("mixed");
+    expect(result.styles.textAlignVertical).toBe("mixed");
   });
 
   it("omits textDecoration when value is NONE", async () => {
