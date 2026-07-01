@@ -12,26 +12,93 @@ export const toHex = (color: any) => {
   return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 };
 
+// Convert an RGBA color to a hex string, appending an 8-bit alpha suffix
+// when the color is translucent (alpha < 1). Defaults alpha to 1.
+export const toHexA = (color: any) => {
+  const hex = toHex(color);
+  const a = color && color.a != null ? color.a : 1;
+  if (a >= 1) return hex;
+  return hex + Math.round(a * 255).toString(16).padStart(2, "0");
+};
+
+const GRADIENT_TYPES = new Set([
+  "GRADIENT_LINEAR",
+  "GRADIENT_RADIAL",
+  "GRADIENT_ANGULAR",
+  "GRADIENT_DIAMOND",
+]);
+
+// A blend mode worth emitting — Figma's default is NORMAL (PASS_THROUGH on
+// containers); both mean "no special mixing" so they're omitted.
+const meaningfulBlendMode = (mode: any) =>
+  typeof mode === "string" && mode !== "NORMAL" && mode !== "PASS_THROUGH"
+    ? mode
+    : undefined;
+
+// Resolve a single gradient stop to { position, color } with a hex/hex-alpha color.
+const serializeGradientStop = (stop: any) => {
+  const out: any = { position: pixelRound(stop.position) };
+  if (stop.color) out.color = toHexA(stop.color);
+  return out;
+};
+
+// Serialize one paint. Solid paints collapse to a hex (or hex+alpha) string —
+// keeping the historical shape. Gradient paints resolve inline to an object
+// carrying type, stops, and transform. Other paint types (IMAGE, VIDEO) drop.
+export const serializePaint = (paint: any) => {
+  if (paint.type === "SOLID" && "color" in paint) {
+    const hex = toHex(paint.color);
+    const opacity = paint.opacity != null ? paint.opacity : 1;
+    const color =
+      opacity === 1
+        ? hex
+        : hex + Math.round(opacity * 255).toString(16).padStart(2, "0");
+    // A solid with a non-default mix mode can't be a bare hex string — promote
+    // it to an object so the blendMode survives. Plain solids stay strings to
+    // preserve the historical shape (and the dedup contract).
+    const blend = meaningfulBlendMode(paint.blendMode);
+    if (blend) return { type: "SOLID", color, blendMode: blend };
+    return color;
+  }
+  if (GRADIENT_TYPES.has(paint.type)) {
+    const g: any = { type: paint.type };
+    if (Array.isArray(paint.gradientStops))
+      g.gradientStops = paint.gradientStops.map(serializeGradientStop);
+    if (paint.gradientTransform) g.gradientTransform = paint.gradientTransform;
+    if (paint.opacity != null && paint.opacity !== 1) g.opacity = paint.opacity;
+    const blend = meaningfulBlendMode(paint.blendMode);
+    if (blend) g.blendMode = blend;
+    return g;
+  }
+  return undefined;
+};
+
 export const serializePaints = (paints: any) => {
   if (isMixed(paints)) return "mixed";
 
   if (!paints || !Array.isArray(paints)) return undefined;
 
   const result = paints
-    .filter((paint: any) => paint.type === "SOLID" && "color" in paint)
-    .map((paint: any) => {
-      const hex = toHex(paint.color);
-      const opacity = paint.opacity != null ? paint.opacity : 1;
-      if (opacity === 1) return hex;
-      return (
-        hex +
-        Math.round(opacity * 255)
-          .toString(16)
-          .padStart(2, "0")
-      );
-    });
+    .map(serializePaint)
+    .filter((paint: any) => paint !== undefined);
 
   return result.length > 0 ? result : undefined;
+};
+
+// Serialize a single effect (shadow or blur) to a compact object, emitting
+// only the fields that apply. Blur effects carry just a radius; shadows add
+// color/offset/spread.
+export const serializeEffect = (effect: any) => {
+  const out: any = { type: effect.type };
+  if (effect.color) out.color = toHexA(effect.color);
+  if (effect.offset)
+    out.offset = { x: pixelRound(effect.offset.x), y: pixelRound(effect.offset.y) };
+  if (typeof effect.radius === "number") out.radius = effect.radius;
+  if (typeof effect.spread === "number" && effect.spread !== 0)
+    out.spread = effect.spread;
+  const blend = meaningfulBlendMode(effect.blendMode);
+  if (blend) out.blendMode = blend;
+  return out;
 };
 
 export const getBounds = (node: any) => {
@@ -67,11 +134,83 @@ export const serializeStyles = async (node: any) => {
     }
     const strokes = serializePaints(node.strokes);
     if (strokes !== undefined) styles.strokes = strokes;
+
+    // Stroke geometry — border thickness, side, and dash. These affect layout
+    // box size (strokeAlign) and edge coverage, so consumers can't infer them
+    // from color alone.
+    const hasStroke =
+      strokes !== undefined ||
+      (Array.isArray(node.strokes) && node.strokes.length > 0);
+    if (hasStroke) {
+      if ("strokeWeight" in node && typeof node.strokeWeight === "number") {
+        styles.strokeWeight = node.strokeWeight;
+      }
+      // Per-side weights: emit only when they actually differ (uniform weight
+      // is already captured by strokeWeight, so emitting all four is noise).
+      const sides = ["Top", "Right", "Bottom", "Left"] as const;
+      const sideWeights = sides.map((s) => node[`stroke${s}Weight`]);
+      const hasPerSide = sideWeights.every((w) => typeof w === "number");
+      const perSideDiffer =
+        hasPerSide && sideWeights.some((w) => w !== sideWeights[0]);
+      if (perSideDiffer) {
+        sides.forEach((s) => {
+          styles[`stroke${s}Weight`] = node[`stroke${s}Weight`];
+        });
+      }
+      if ("strokeAlign" in node && typeof node.strokeAlign === "string") {
+        styles.strokeAlign = node.strokeAlign;
+      }
+      if (Array.isArray(node.dashPattern) && node.dashPattern.length > 0) {
+        styles.dashPattern = node.dashPattern;
+      }
+    }
   }
 
   if ("cornerRadius" in node) {
-    const cr = isMixed(node.cornerRadius) ? "mixed" : node.cornerRadius;
-    if (cr !== 0) styles.cornerRadius = cr;
+    if (isMixed(node.cornerRadius)) {
+      // Corners differ — resolve each named corner when Figma exposes it.
+      const corners: any = {};
+      const map = [
+        ["topLeft", "topLeftRadius"],
+        ["topRight", "topRightRadius"],
+        ["bottomRight", "bottomRightRadius"],
+        ["bottomLeft", "bottomLeftRadius"],
+      ] as const;
+      for (const [key, prop] of map) {
+        if (typeof node[prop] === "number") corners[key] = node[prop];
+      }
+      styles.cornerRadius =
+        Object.keys(corners).length > 0 ? corners : "mixed";
+    } else if (node.cornerRadius !== 0) {
+      styles.cornerRadius = node.cornerRadius;
+    }
+  }
+
+  // Effects — shadows and blurs are otherwise summarized away entirely.
+  if (Array.isArray(node.effects) && node.effects.length > 0) {
+    const effects = node.effects
+      .filter((e: any) => e.visible !== false)
+      .map(serializeEffect);
+    if (effects.length > 0) styles.effects = effects;
+  }
+
+  // Node-level translucency and mix mode.
+  if (typeof node.opacity === "number" && node.opacity !== 1) {
+    styles.opacity = pixelRound(node.opacity);
+  }
+  const nodeBlend = meaningfulBlendMode(node.blendMode);
+  if (nodeBlend) styles.blendMode = nodeBlend;
+
+  // Auto-layout gap — the icon↔label / item spacing consumers can't measure.
+  if (
+    "layoutMode" in node &&
+    typeof node.layoutMode === "string" &&
+    node.layoutMode !== "NONE"
+  ) {
+    styles.layoutMode = node.layoutMode;
+    if (typeof node.itemSpacing === "number") {
+      styles.itemSpacing = node.itemSpacing;
+    }
   }
 
   if ("paddingLeft" in node) {
@@ -131,6 +270,11 @@ export const serializeText = async (node: any, base: any) => {
         ? "mixed"
         : node.textDecoration !== "NONE"
           ? node.textDecoration
+          : undefined,
+      textCase: isMixed(node.textCase)
+        ? "mixed"
+        : node.textCase && node.textCase !== "ORIGINAL"
+          ? node.textCase
           : undefined,
       lineHeight: serializeLineHeight(node.lineHeight),
       letterSpacing: serializeLetterSpacing(node.letterSpacing),

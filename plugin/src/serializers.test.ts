@@ -75,9 +75,44 @@ describe("serializePaints", () => {
   it("returns undefined for empty array", () => {
     expect(serializePaints([])).toBeUndefined();
   });
-  it("filters out non-SOLID paints", () => {
-    const paints = [{ type: "IMAGE" }, { type: "GRADIENT_LINEAR" }];
-    expect(serializePaints(paints)).toBeUndefined();
+  it("filters out unsupported paint types (IMAGE) but keeps gradients", () => {
+    const paints = [
+      { type: "IMAGE" },
+      {
+        type: "GRADIENT_LINEAR",
+        gradientStops: [
+          { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+          { position: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+        ],
+      },
+    ];
+    const result = serializePaints(paints) as any[];
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe("GRADIENT_LINEAR");
+    expect(result[0].gradientStops).toHaveLength(2);
+  });
+
+  it("returns undefined when only unsupported paint types are present", () => {
+    expect(serializePaints([{ type: "IMAGE" }, { type: "VIDEO" }])).toBeUndefined();
+  });
+
+  it("resolves gradient paints inline with stops and transform", () => {
+    const paints = [
+      {
+        type: "GRADIENT_RADIAL",
+        gradientTransform: [[1, 0, 0], [0, 1, 0]],
+        gradientStops: [
+          { position: 0, color: { r: 1, g: 1, b: 1, a: 0.5 } },
+          { position: 1, color: { r: 0, g: 0, b: 0, a: 1 } },
+        ],
+      },
+    ];
+    const result = serializePaints(paints) as any[];
+    expect(result[0].type).toBe("GRADIENT_RADIAL");
+    expect(result[0].gradientTransform).toEqual([[1, 0, 0], [0, 1, 0]]);
+    // 0.5 alpha → #ffffff80
+    expect(result[0].gradientStops[0].color).toBe("#ffffff80");
+    expect(result[0].gradientStops[1].color).toBe("#000000");
   });
   it("serializes a solid paint with opacity 1 as plain hex", () => {
     const paints = [{ type: "SOLID", color: { r: 1, g: 0, b: 0 }, opacity: 1 }];
@@ -93,6 +128,30 @@ describe("serializePaints", () => {
     const paints = [{ type: "SOLID", color: { r: 0, g: 0, b: 1 } }];
     expect(serializePaints(paints)).toEqual(["#0000ff"]);
   });
+  it("promotes a solid paint with a non-default blendMode to an object", () => {
+    const paints = [
+      { type: "SOLID", color: { r: 1, g: 0, b: 0 }, blendMode: "MULTIPLY" },
+    ];
+    const result = serializePaints(paints) as any[];
+    expect(result[0]).toEqual({ type: "SOLID", color: "#ff0000", blendMode: "MULTIPLY" });
+  });
+
+  it("keeps solid paints with NORMAL/PASS_THROUGH blendMode as plain hex", () => {
+    const paints = [
+      { type: "SOLID", color: { r: 1, g: 0, b: 0 }, blendMode: "NORMAL" },
+      { type: "SOLID", color: { r: 0, g: 1, b: 0 }, blendMode: "PASS_THROUGH" },
+    ];
+    expect(serializePaints(paints)).toEqual(["#ff0000", "#00ff00"]);
+  });
+
+  it("preserves opacity alpha alongside blendMode on a solid paint", () => {
+    const paints = [
+      { type: "SOLID", color: { r: 1, g: 0, b: 0 }, opacity: 0.5, blendMode: "SCREEN" },
+    ];
+    const result = serializePaints(paints) as any[];
+    expect(result[0]).toEqual({ type: "SOLID", color: "#ff000080", blendMode: "SCREEN" });
+  });
+
   it("serializes multiple solid paints", () => {
     const paints = [
       { type: "SOLID", color: { r: 1, g: 0, b: 0 } },
@@ -331,6 +390,146 @@ describe("serializeStyles", () => {
     const result = await serializeStyles(node);
     expect(result.padding).toEqual({ top: 5, right: 20, bottom: 15, left: 10 });
   });
+
+  // Chip node regression: a uniform 2px border must surface as strokeWeight 2.
+  it("includes strokeWeight when the node has a border", async () => {
+    const node = {
+      strokes: [{ type: "SOLID", color: { r: 0, g: 0, b: 0 } }],
+      strokeWeight: 2,
+      strokeTopWeight: 2,
+      strokeRightWeight: 2,
+      strokeBottomWeight: 2,
+      strokeLeftWeight: 2,
+      strokeAlign: "INSIDE",
+    };
+    const result = await serializeStyles(node);
+    expect(result.strokeWeight).toBe(2);
+    expect(result.strokeAlign).toBe("INSIDE");
+    // Uniform per-side weights are redundant, so they are omitted.
+    expect(result.strokeTopWeight).toBeUndefined();
+  });
+
+  it("omits stroke geometry when the node has no strokes", async () => {
+    const node = { strokes: [], strokeWeight: 1, strokeAlign: "INSIDE" };
+    const result = await serializeStyles(node);
+    expect(result.strokeWeight).toBeUndefined();
+    expect(result.strokeAlign).toBeUndefined();
+  });
+
+  it("emits per-side stroke weights only when they differ", async () => {
+    const node = {
+      strokes: [{ type: "SOLID", color: { r: 0, g: 0, b: 0 } }],
+      strokeWeight: 0, // Figma reports 0/mixed when sides differ
+      strokeTopWeight: 1,
+      strokeRightWeight: 0,
+      strokeBottomWeight: 1,
+      strokeLeftWeight: 0,
+    };
+    const result = await serializeStyles(node);
+    expect(result.strokeTopWeight).toBe(1);
+    expect(result.strokeRightWeight).toBe(0);
+    expect(result.strokeBottomWeight).toBe(1);
+    expect(result.strokeLeftWeight).toBe(0);
+  });
+
+  it("includes dashPattern for dashed strokes", async () => {
+    const node = {
+      strokes: [{ type: "SOLID", color: { r: 0, g: 0, b: 0 } }],
+      dashPattern: [4, 2],
+    };
+    const result = await serializeStyles(node);
+    expect(result.dashPattern).toEqual([4, 2]);
+  });
+
+  // Button glass fill regression: a radial gradient must resolve inline
+  // (type + two stops), not collapse to a style name.
+  it("resolves a gradient fill inline as GRADIENT_RADIAL with stops", async () => {
+    const node = {
+      fills: [
+        {
+          type: "GRADIENT_RADIAL",
+          gradientTransform: [[1, 0, 0], [0, 1, 0]],
+          gradientStops: [
+            { position: 0, color: { r: 1, g: 1, b: 1, a: 0.4 } },
+            { position: 1, color: { r: 1, g: 1, b: 1, a: 0 } },
+          ],
+        },
+      ],
+    };
+    const result = await serializeStyles(node);
+    expect(Array.isArray(result.fills)).toBe(true);
+    expect(result.fills[0].type).toBe("GRADIENT_RADIAL");
+    expect(result.fills[0].gradientStops).toHaveLength(2);
+  });
+
+  it("includes effects with color, offset, radius, and spread", async () => {
+    const node = {
+      effects: [
+        {
+          type: "DROP_SHADOW",
+          visible: true,
+          color: { r: 0, g: 0, b: 0, a: 0.25 },
+          offset: { x: 0, y: 4 },
+          radius: 8,
+          spread: 2,
+        },
+        { type: "LAYER_BLUR", visible: true, radius: 12 },
+        { type: "DROP_SHADOW", visible: false, radius: 99 },
+      ],
+    };
+    const result = await serializeStyles(node);
+    expect(result.effects).toHaveLength(2); // invisible one dropped
+    expect(result.effects[0]).toEqual({
+      type: "DROP_SHADOW",
+      color: "#00000040",
+      offset: { x: 0, y: 4 },
+      radius: 8,
+      spread: 2,
+    });
+    expect(result.effects[1]).toEqual({ type: "LAYER_BLUR", radius: 12 });
+  });
+
+  it("includes node opacity and blendMode when non-default", async () => {
+    const result = await serializeStyles({ opacity: 0.5, blendMode: "MULTIPLY" });
+    expect(result.opacity).toBe(0.5);
+    expect(result.blendMode).toBe("MULTIPLY");
+  });
+
+  it("omits opacity when 1 and blendMode when NORMAL/PASS_THROUGH", async () => {
+    const result = await serializeStyles({ opacity: 1, blendMode: "PASS_THROUGH" });
+    expect(result.opacity).toBeUndefined();
+    expect(result.blendMode).toBeUndefined();
+  });
+
+  it("includes layoutMode and itemSpacing for auto-layout frames", async () => {
+    const node = { layoutMode: "HORIZONTAL", itemSpacing: 8 };
+    const result = await serializeStyles(node);
+    expect(result.layoutMode).toBe("HORIZONTAL");
+    expect(result.itemSpacing).toBe(8);
+  });
+
+  it("omits auto-layout fields when layoutMode is NONE", async () => {
+    const result = await serializeStyles({ layoutMode: "NONE", itemSpacing: 8 });
+    expect(result.layoutMode).toBeUndefined();
+    expect(result.itemSpacing).toBeUndefined();
+  });
+
+  it("emits per-corner radius when corners differ", async () => {
+    const node = {
+      cornerRadius: Symbol(),
+      topLeftRadius: 8,
+      topRightRadius: 8,
+      bottomRightRadius: 0,
+      bottomLeftRadius: 0,
+    };
+    const result = await serializeStyles(node);
+    expect(result.cornerRadius).toEqual({
+      topLeft: 8,
+      topRight: 8,
+      bottomRight: 0,
+      bottomLeft: 0,
+    });
+  });
 });
 
 // ── serializeText ─────────────────────────────────────────────────────────────
@@ -454,6 +653,23 @@ describe("serializeText", () => {
     };
     const result = await serializeText(node, makeBase());
     expect(result.styles.textDecoration).toBeUndefined();
+  });
+
+  it("includes textCase when not ORIGINAL and omits it otherwise", async () => {
+    const base = {
+      fontName: { family: "Inter", style: "Regular" },
+      fontSize: 14,
+      fontWeight: 400,
+      textDecoration: "NONE",
+      lineHeight: { unit: "AUTO" },
+      letterSpacing: { value: 0, unit: "PIXELS" },
+      textAlignHorizontal: "LEFT",
+      characters: "x",
+    };
+    const upper = await serializeText({ ...base, textCase: "UPPER" }, makeBase());
+    expect(upper.styles.textCase).toBe("UPPER");
+    const original = await serializeText({ ...base, textCase: "ORIGINAL" }, makeBase());
+    expect(original.styles.textCase).toBeUndefined();
   });
 
   it("includes textDecoration when not NONE", async () => {
