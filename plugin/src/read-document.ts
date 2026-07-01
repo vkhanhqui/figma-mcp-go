@@ -58,6 +58,26 @@ export const handleReadDocumentRequest = async (request: any) => {
       const dedupeComponents = !!(request.params && request.params.dedupeComponents);
       const componentDefs = new Map<string, any>();
 
+      // Heartbeat progress: bridge inactivity-resets the request timeout on
+      // every progress_update message, so a long traversal on big files will
+      // not be killed as long as we keep emitting these. The actual percent
+      // is unknown ahead of time, so we send a monotonically growing visited
+      // counter and let the bridge treat it as "still alive".
+      let visitedNodes = 0;
+      let lastProgressAt = 0;
+      const reportProgress = () => {
+        visitedNodes++;
+        const now = Date.now();
+        if (now - lastProgressAt < 250) return;
+        lastProgressAt = now;
+        figma.ui.postMessage({
+          type: "progress_update",
+          requestId: request.requestId,
+          progress: 1,
+          message: `Walking design context (${visitedNodes} nodes)…`,
+        });
+      };
+
       const serializeForDetail = async (n: any) => {
         const base = { id: n.id, name: n.name, type: n.type, bounds: getBounds(n) };
         if (detail === "minimal") return base;
@@ -139,6 +159,7 @@ export const handleReadDocumentRequest = async (request: any) => {
       };
 
       const serializeWithDepth = async (node: any, currentDepth: number): Promise<any> => {
+        reportProgress();
         if (dedupeComponents && node.type === "INSTANCE") {
           const mc = await node.getMainComponentAsync();
           if (mc && !componentDefs.has(mc.id)) {
@@ -199,6 +220,16 @@ export const handleReadDocumentRequest = async (request: any) => {
         );
         return Object.assign({}, serialized, { children: serializedChildren });
       };
+
+      // Send an immediate progress beat so the bridge resets its timer
+      // before the first heavy traversal starts.
+      figma.ui.postMessage({
+        type: "progress_update",
+        requestId: request.requestId,
+        progress: 1,
+        message: "Building design context…",
+      });
+      await new Promise((r) => setTimeout(r, 0));
 
       const selection = figma.currentPage.selection;
       const rawContextNodes =
