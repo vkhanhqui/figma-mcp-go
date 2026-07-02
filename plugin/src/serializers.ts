@@ -47,17 +47,47 @@ export const getBounds = (node: any) => {
   return undefined;
 };
 
+// Resolve a single VariableAlias { type, id } to the variable's name, or null.
+const resolveVariableName = async (alias: any): Promise<string | null> => {
+  if (!alias || !alias.id) return null;
+  try {
+    const variable = await figma.variables.getVariableByIdAsync(alias.id);
+    return variable?.name ?? null;
+  } catch {
+    return null;
+  }
+};
+
+// Resolve an array of VariableAlias objects to an array of variable names.
+const resolveVariableNames = async (aliases: any[]): Promise<(string | null)[]> => {
+  return Promise.all(aliases.map(resolveVariableName));
+};
+
 export const serializeStyles = async (node: any) => {
   const styles: any = {};
+  const bv = node.boundVariables;
 
   if ("fills" in node) {
-    // Prefer named style over raw fill values when a style is applied.
     if (node.fillStyleId && typeof node.fillStyleId === "string") {
       const style = await figma.getStyleByIdAsync(node.fillStyleId);
       if (style) styles.fillStyle = style.name;
     }
     const fills = serializePaints(node.fills);
     if (fills !== undefined) styles.fills = fills;
+
+    if (bv?.fills && Array.isArray(bv.fills)) {
+      const names = await resolveVariableNames(bv.fills);
+      if (names.some((n) => n !== null)) styles.fillVariables = names;
+    } else if (!isMixed(node.fills) && Array.isArray(node.fills)) {
+      const paintVarNames = await Promise.all(
+        node.fills.map(async (p: any) => {
+          const alias = p.boundVariables?.color;
+          if (!alias) return null;
+          return resolveVariableName(alias);
+        })
+      );
+      if (paintVarNames.some((n: any) => n !== null)) styles.fillVariables = paintVarNames;
+    }
   }
 
   if ("strokes" in node) {
@@ -67,6 +97,20 @@ export const serializeStyles = async (node: any) => {
     }
     const strokes = serializePaints(node.strokes);
     if (strokes !== undefined) styles.strokes = strokes;
+
+    if (bv?.strokes && Array.isArray(bv.strokes)) {
+      const names = await resolveVariableNames(bv.strokes);
+      if (names.some((n) => n !== null)) styles.strokeVariables = names;
+    } else if (!isMixed(node.strokes) && Array.isArray(node.strokes)) {
+      const strokeVarNames = await Promise.all(
+        node.strokes.map(async (p: any) => {
+          const alias = p.boundVariables?.color;
+          if (!alias) return null;
+          return resolveVariableName(alias);
+        })
+      );
+      if (strokeVarNames.some((n: any) => n !== null)) styles.strokeVariables = strokeVarNames;
+    }
   }
 
   if ("cornerRadius" in node) {
@@ -81,6 +125,20 @@ export const serializeStyles = async (node: any) => {
       bottom: node.paddingBottom,
       left: node.paddingLeft,
     };
+  }
+
+  // Resolve scalar bound variables (opacity, cornerRadius, padding, itemSpacing, etc.)
+  if (bv) {
+    const scalarProps = [
+      "opacity", "cornerRadius", "itemSpacing",
+      "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+    ];
+    for (const prop of scalarProps) {
+      if (bv[prop]) {
+        const name = await resolveVariableName(bv[prop]);
+        if (name) styles[`${prop}Variable`] = name;
+      }
+    }
   }
 
   return styles;
